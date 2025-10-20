@@ -26,8 +26,19 @@ function normalize_length_unit(u = 'mm') {
 function format_ui_len(val_mm, uiUnit) {
   if (val_mm === '' || val_mm === undefined || val_mm === null) return '';
   const v = from_mm(val_mm, uiUnit);
-  return uiUnit === 'in' ? Number(v).toFixed(3) : v;
+
+  // Inches: 3 decimales fijos
+  if (uiUnit === 'in') {
+    return Number(v).toFixed(3);
+  }
+
+  // mm: redondeo a 2 decimales y sin ceros finales (2.00 -> 2)
+  const n = Number(v);
+  if (!isFinite(n)) return '';
+  const rounded = Math.round((n + Number.EPSILON) * 100) / 100;   // redondeo 2 dec
+  return rounded.toFixed(2).replace(/\.?0+$/, '');                // quita .00 o 0
 }
+
 
 function clamp_in_decimals(str) {
   const m = String(str).match(/^(-?\d*)(?:\.(\d{0,3}))?/);
@@ -521,6 +532,30 @@ async function renderParamsUI(frm) {
       }, 80)
     );
   });
+
+  // Al salir del input, si la UI está en mm, normaliza a 2 dec y sin ceros finales
+  wrap.querySelectorAll('.pd-input').forEach((inp) => {
+    inp.addEventListener('blur', () => {
+      const isLen = inp.getAttribute('data-islen') === '1';
+      if (!isLen || uiUnit !== 'mm') return;
+
+      const raw = (inp.value || '').replace(',', '.');
+      const n = parseFloat(raw);
+      if (isNaN(n)) return;
+
+      // Redondeo a 2 dec y sin ceros finales
+      const rounded = Math.round((n + Number.EPSILON) * 100) / 100;
+      const shown = rounded.toFixed(2).replace(/\.?0+$/, '');
+
+      // Refleja en UI y dispara el flujo normal de actualización
+      if (inp.value !== shown) {
+        inp.value = shown;
+        // reutiliza tu handler de 'input' (debounce y recalcula derivados/preview)
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+  });
+
 }
 
 async function renderFromGeometrySpec(frm, overrideValues = null) {
