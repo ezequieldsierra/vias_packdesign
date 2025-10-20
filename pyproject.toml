@@ -8,8 +8,14 @@ requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
 dependencies = [
-    # "frappe~=15.0.0" # Installed and managed by bench.
+  "cairosvg==2.7.1",
+  "tinycss2>=1.2.1",
+  "cssselect2>=0.7.0",
+  "lxml==5.2.1",
+  "ezdxf>=1.0,<2.0",
+  "svgpathtools==1.6.1"
 ]
+
 
 [build-system]
 requires = ["flit_core >=3.4,<4"]

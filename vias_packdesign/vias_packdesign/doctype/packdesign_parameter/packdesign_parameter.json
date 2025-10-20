@@ -1,0 +1,107 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:label",
+ "creation": "2025-10-11 23:10:52.444642",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "label",
+  "fieldname",
+  "datatype",
+  "unit",
+  "default_value",
+  "options",
+  "min_value",
+  "max_value",
+  "step",
+  "help",
+  "is_active"
+ ],
+ "fields": [
+  {
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Etiqueta",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "fieldname",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Fieldname (interno)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "datatype",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Tipo de Dato",
+   "options": "Int\nFloat\nData\nSelect\nColor\nCheck",
+   "reqd": 1
+  },
+  {
+   "fieldname": "unit",
+   "fieldtype": "Data",
+   "label": "Unidad"
+  },
+  {
+   "fieldname": "default_value",
+   "fieldtype": "Data",
+   "label": "Valor por Defecto"
+  },
+  {
+   "fieldname": "options",
+   "fieldtype": "Text",
+   "label": "Opciones (para Select)"
+  },
+  {
+   "fieldname": "min_value",
+   "fieldtype": "Float",
+   "label": "M\u00ednimo"
+  },
+  {
+   "fieldname": "max_value",
+   "fieldtype": "Float",
+   "label": "M\u00e1ximo"
+  },
+  {
+   "fieldname": "step",
+   "fieldtype": "Float",
+   "label": "Paso"
+  },
+  {
+   "fieldname": "help",
+   "fieldtype": "Small Text",
+   "label": "Ayuda"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "label": "Activo"
+  }
+ ],
+ "links": [],
+ "modified": "2025-10-12 01:44:32.603355",
+ "modified_by": "Administrator",
+ "module": "VIAS PackDesign",
+ "name": "PackDesign Parameter",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

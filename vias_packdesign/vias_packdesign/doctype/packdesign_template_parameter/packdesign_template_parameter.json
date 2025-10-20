@@ -1,0 +1,25 @@
+{
+  "doctype": "DocType",
+  "name": "PackDesign Template Parameter",
+  "module": "VIAS PackDesign",
+  "custom": 0,
+  "istable": 1,
+  "editable_grid": 1,
+  "fields": [
+    { "fieldname": "parameter", "label": "Parámetro", "fieldtype": "Link", "options": "PackDesign Parameter", "reqd": 1, "in_list_view": 1 },
+    { "fieldname": "label", "label": "Etiqueta (UI)", "fieldtype": "Data", "in_list_view": 1 },
+    { "fieldname": "value_type", "label": "Tipo de Valor", "fieldtype": "Select", "options": "Int\nFloat\nData\nSelect\nColor\nCheck" },
+    { "fieldname": "default_value", "label": "Valor por Defecto", "fieldtype": "Data", "in_list_view": 1 },
+    { "fieldname": "required", "label": "Requerido", "fieldtype": "Check", "default": "0", "in_list_view": 1 },
+    { "fieldname": "unit", "label": "Unidad", "fieldtype": "Data" },
+    { "fieldname": "min_value", "label": "Mínimo", "fieldtype": "Float" },
+    { "fieldname": "max_value", "label": "Máximo", "fieldtype": "Float" },
+    { "fieldname": "step", "label": "Paso", "fieldtype": "Float" },
+    { "fieldname": "select_options", "label": "Opciones (Select)", "fieldtype": "Text" },
+    { "fieldname": "expression", "label": "Fórmula/Expresión", "fieldtype": "Small Text" },
+    { "fieldname": "note", "label": "Nota", "fieldtype": "Small Text" }
+  ],
+  "permissions": [
+    { "role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1 }
+  ]
+}

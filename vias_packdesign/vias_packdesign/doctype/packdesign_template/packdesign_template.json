@@ -1,0 +1,113 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:template_name",
+ "creation": "2025-10-11 23:10:52.663767",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "template_name",
+  "template_code",
+  "category",
+  "thumbnail",
+  "description",
+  "sb_params",
+  "parameters",
+  "cb_params",
+  "components",
+  "is_active",
+  "section_break_pvhp",
+  "geometry_spec"
+ ],
+ "fields": [
+  {
+   "fieldname": "template_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Nombre de Plantilla",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "template_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "C\u00f3digo"
+  },
+  {
+   "fieldname": "category",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Categor\u00eda",
+   "options": "PackDesign Category",
+   "reqd": 1
+  },
+  {
+   "fieldname": "thumbnail",
+   "fieldtype": "Attach Image",
+   "label": "Miniatura"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Descripci\u00f3n"
+  },
+  {
+   "fieldname": "sb_params",
+   "fieldtype": "Section Break",
+   "label": "Par\u00e1metros"
+  },
+  {
+   "fieldname": "parameters",
+   "fieldtype": "Table",
+   "label": "Par\u00e1metros de Plantilla",
+   "options": "PackDesign Template Parameter"
+  },
+  {
+   "fieldname": "cb_params",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "components",
+   "fieldtype": "Table",
+   "label": "Capas / L\u00edneas",
+   "options": "PackDesign Component"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Activa"
+  },
+  {
+   "fieldname": "section_break_pvhp",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "geometry_spec",
+   "fieldtype": "Code",
+   "label": "Geometria"
+  }
+ ],
+ "links": [],
+ "modified": "2025-10-12 01:12:08.597495",
+ "modified_by": "Administrator",
+ "module": "VIAS PackDesign",
+ "name": "PackDesign Template",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

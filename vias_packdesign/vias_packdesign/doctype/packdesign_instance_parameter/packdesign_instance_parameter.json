@@ -1,0 +1,59 @@
+{
+ "actions": [],
+ "creation": "2025-10-11 23:10:52.334333",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "parameter",
+  "label",
+  "unit",
+  "value",
+  "note"
+ ],
+ "fields": [
+  {
+   "fieldname": "parameter",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Par\u00e1metro",
+   "options": "PackDesign Parameter",
+   "reqd": 1
+  },
+  {
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Etiqueta"
+  },
+  {
+   "fieldname": "unit",
+   "fieldtype": "Data",
+   "label": "Unidad"
+  },
+  {
+   "fieldname": "value",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Valor",
+   "reqd": 1
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Small Text",
+   "label": "Nota"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2025-10-12 03:52:40.835486",
+ "modified_by": "Administrator",
+ "module": "VIAS PackDesign",
+ "name": "PackDesign Instance Parameter",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

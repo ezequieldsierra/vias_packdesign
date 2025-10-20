@@ -1,0 +1,130 @@
+{
+ "actions": [],
+ "autoname": "format:PDINST-{#####}",
+ "creation": "2025-10-11 23:10:52.906332",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_break_jjdv",
+  "title",
+  "column_break_ftfv",
+  "template",
+  "column_break_bhxp",
+  "column_break_hqov",
+  "status",
+  "section_break_kmyg",
+  "values_html",
+  "values",
+  "section_break_zfxo",
+  "preview_html",
+  "section_break_sojr",
+  "preview_image",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Nombre",
+   "reqd": 1
+  },
+  {
+   "fieldname": "template",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Plantilla",
+   "options": "PackDesign Template",
+   "reqd": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Estado",
+   "options": "Draft\nReady\nProduced\nArchived"
+  },
+  {
+   "fieldname": "preview_image",
+   "fieldtype": "Attach Image",
+   "label": "Preview (Imagen)"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notas"
+  },
+  {
+   "fieldname": "values",
+   "fieldtype": "Table",
+   "hidden": 1,
+   "label": "Par\u00e1metros (Instancia)",
+   "options": "PackDesign Instance Parameter"
+  },
+  {
+   "fieldname": "preview_html",
+   "fieldtype": "HTML",
+   "label": "Preview (HTML)"
+  },
+  {
+   "fieldname": "section_break_zfxo",
+   "fieldtype": "Section Break",
+   "hide_border": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_sojr",
+   "fieldtype": "Section Break",
+   "hide_border": 1
+  },
+  {
+   "fieldname": "column_break_ftfv",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "values_html",
+   "fieldtype": "HTML"
+  },
+  {
+   "fieldname": "section_break_jjdv",
+   "fieldtype": "Section Break",
+   "hide_border": 1
+  },
+  {
+   "fieldname": "section_break_kmyg",
+   "fieldtype": "Section Break",
+   "hide_border": 1
+  },
+  {
+   "fieldname": "column_break_hqov",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_bhxp",
+   "fieldtype": "Column Break"
+  }
+ ],
+ "hide_toolbar": 1,
+ "links": [],
+ "modified": "2025-10-20 12:12:49.719605",
+ "modified_by": "Administrator",
+ "module": "VIAS PackDesign",
+ "name": "PackDesign Instance",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

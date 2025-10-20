@@ -5,6 +5,9 @@ app_description = "Packaging Design App"
 app_email = "info@viassuite.com"
 app_license = "mit"
 
+after_install = "vias_packdesign.install.after_install"
+
+
 # Apps
 # ------------------
 
