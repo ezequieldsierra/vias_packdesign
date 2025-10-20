@@ -254,19 +254,30 @@ function normalizeNonScalingText(rootSvg) {
 
 async function recomputeDerived(frm, tpl, hasFormulaDefault) {
   if (!frm.doc._pd_values) frm.doc._pd_values = {};
-  const params = (tpl.parameters || []).map((p) => ({
+  if (!frm.doc._pd_overrides) frm.doc._pd_overrides = {}; // mapa de overrides manuales
+
+  const params = (tpl.parameters || []).map(p => ({
     key: getParamKey(p),
     unit: p.unit,
-    def: p.default_value
+    def : p.default_value
   }));
+
   for (let pass = 0; pass < 8; pass++) {
     let changed = false;
     const ctx = buildEvalCtx(frm.doc._pd_values);
+
     for (const p of params) {
+      // Solo derivados con default tipo fórmula Y que NO estén overrideados por el usuario
       if (!hasFormulaDefault[p.key]) continue;
-      if (p.def == null || p.def === '') continue;
-      let val = typeof p.def === 'string' ? numOrExpr(p.def, ctx) : Number(p.def);
+      if (frm.doc._pd_overrides[p.key]) continue;
+
+      const def = p.def;
+      if (def == null || def === '') continue;
+
+      let val = (typeof def === 'string') ? numOrExpr(def, ctx) : Number(def);
       if (!isFinite(val)) continue;
+
+      // El contexto opera en mm: las fórmulas ya están en mm
       if (frm.doc._pd_values[p.key] !== val) {
         frm.doc._pd_values[p.key] = val;
         changed = true;
@@ -276,187 +287,210 @@ async function recomputeDerived(frm, tpl, hasFormulaDefault) {
   }
 }
 
+
 async function renderParamsUI(frm) {
-  const holder = frm.get_field('values_html');
-  if (!holder) return;
+  const holder = frm.get_field('values_html'); if (!holder) return;
   const wrap = holder.$wrapper.get(0);
 
-  if (!frm.doc.template) {
-    wrap.innerHTML = `<div style="color:#999">Selecciona una plantilla…</div>`;
-    return;
-  }
+  if (!frm.doc._pd_overrides) frm.doc._pd_overrides = {}; // nuevo
 
+  if (!frm.doc.template) { wrap.innerHTML = `<div style="color:#999">Selecciona una plantilla…</div>`; return; }
   const tpl = await frappe.db.get_doc('PackDesign Template', frm.doc.template);
 
+  // --- mapear defaults que son fórmula
   const hasFormulaDefault = Object.create(null);
-  (tpl.parameters || []).forEach((p) => {
+  (tpl.parameters || []).forEach(p => {
     const key = getParamKey(p);
     const def = p.default_value;
-    const isFormula = typeof def === 'string' && /[A-Za-z_]/.test(def);
+    const isFormula = (typeof def === 'string') && /[A-Za-z_]/.test(def);
     if (isFormula) hasFormulaDefault[key] = true;
   });
 
   const paramIdx = buildParamIndex(tpl);
-
   if (!frm.doc._unit_ui) frm.doc._unit_ui = 'mm';
 
-  if (frm.doc._pd_values && Object.keys(frm.doc._pd_values).some((k) => !paramIdx[canonKey(k)])) {
+  // limpiar _pd_values si hay claves legacy
+  if (frm.doc._pd_values && Object.keys(frm.doc._pd_values).some(k => !paramIdx[canonKey(k)])) {
     frm.doc._pd_values = {};
   }
 
   const current_mm = frm.doc._pd_values || {};
 
-  (frm.doc.values || []).forEach((v) => {
+  // 1) arrastrar desde child table (si faltan)
+  (frm.doc.values || []).forEach(v => {
     let kHit = '';
-    if (v.parameter) {
-      const hit = paramIdx[canonKey(v.parameter)];
-      if (hit && hit.name) kHit = canonKey(hit.name);
-    }
-    if (!kHit && v.label) {
-      const hit = paramIdx[canonKey(v.label)];
-      if (hit && hit.name) kHit = canonKey(hit.name);
-    }
+    if (v.parameter) { const hit = paramIdx[canonKey(v.parameter)]; if (hit && hit.name) kHit = canonKey(hit.name); }
+    if (!kHit && v.label) { const hit = paramIdx[canonKey(v.label)]; if (hit && hit.name) kHit = canonKey(hit.name); }
     if (!kHit) return;
     if (current_mm[kHit] !== undefined && current_mm[kHit] !== null && current_mm[kHit] !== '') return;
     const n = Number(v.value);
     if (Number.isFinite(n)) current_mm[kHit] = n;
   });
 
-  const params = (tpl.parameters || []).map((p) => ({
+  // 2) completar faltantes con defaults (multipass, soporta fórmulas)
+  const params = (tpl.parameters || []).map(p => ({
     key: getParamKey(p),
     unit: p.unit,
     dtype: String(p.datatype || '').toLowerCase(),
-    def: p.default_value
+    def: p.default_value,
+    label: getParamLabel(p)
   }));
-
-  for (let pass = 0; pass < 8; pass++) {
+  for (let pass=0; pass<8; pass++) {
     let changed = false;
     const ctx = buildEvalCtx(current_mm);
     for (const p of params) {
       if (current_mm[p.key] !== undefined && current_mm[p.key] !== '') continue;
       if (p.def === undefined || p.def === null || p.def === '') continue;
-      let val = typeof p.def === 'string' ? numOrExpr(p.def, ctx) : Number(p.def);
+
+      let val = (typeof p.def === 'string') ? numOrExpr(p.def, ctx) : Number(p.def);
       if (!isFinite(val)) continue;
+
       if (is_length_unit(p.unit)) {
         const base = normalize_length_unit(p.unit);
-        const isFormula = typeof p.def === 'string' && /[A-Za-z_]/.test(p.def);
-        val = isFormula ? val : to_mm(val, base);
+        const isFormula = (typeof p.def === 'string') && /[A-Za-z_]/.test(p.def);
+        val = isFormula ? val : to_mm(val, base); // fórmula ya en mm
       }
-      current_mm[p.key] = val;
-      changed = true;
+      current_mm[p.key] = val; changed = true;
     }
     if (!changed) break;
   }
-
   frm.doc._pd_values = current_mm;
 
+  // 2.5) recalcular derivados (respetando overrides)
   await recomputeDerived(frm, tpl, hasFormulaDefault);
 
+  // 3) sincronizar child table a NAME
   syncHiddenValuesTable(frm, frm.doc._pd_values || {}, tpl, true);
 
+  // ==== UI ====
   const unitToggle = `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
       <div style="font-weight:600">Parámetros</div>
       <div style="margin-left:auto;font-size:12px">
         Unidad de entrada:
-        <label style="margin-left:6px"><input type="radio" name="pd_unit_ui" value="mm" ${frm.doc._unit_ui === 'mm' ? 'checked' : ''}/> mm</label>
-        <label style="margin-left:6px"><input type="radio" name="pd_unit_ui" value="in" ${frm.doc._unit_ui === 'in' ? 'checked' : ''}/> in</label>
+        <label style="margin-left:6px"><input type="radio" name="pd_unit_ui" value="mm" ${frm.doc._unit_ui==='mm'?'checked':''}/> mm</label>
+        <label style="margin-left:6px"><input type="radio" name="pd_unit_ui" value="in" ${frm.doc._unit_ui==='in'?'checked':''}/> in</label>
       </div>
-    </div>
-  `;
+    </div>`;
 
   const uiUnit = frm.doc._unit_ui;
 
-  const rows = (tpl.parameters || []).map((p) => {
-    const key = getParamKey(p);
-    const isLen = is_length_unit(p.unit);
-    const raw_mm = current_mm[key];
-    const val_ui = isLen ? format_ui_len(raw_mm, uiUnit) : raw_mm ?? '';
-    const dtype = String(p.datatype || '').toLowerCase();
-    const step = dtype === 'int' ? '1' : isLen ? (uiUnit === 'in' ? '0.001' : '0.01') : '0.01';
-    const type = dtype === 'int' || dtype === 'float' || isLen ? 'number' : 'text';
-    const unitBadge = isLen ? uiUnit : p.unit || '';
-    const pattern = uiUnit === 'in' && isLen ? '[0-9]*[.]?[0-9]{0,3}' : '[0-9]*[.]?[0-9]*';
-    const label = getParamLabel(p);
-    const isDerived = !!hasFormulaDefault[key];
+  // helper para evaluar default puntual (número o fórmula) en mm
+  const computeDefaultMM = (p) => {
+    const ctx = buildEvalCtx(frm.doc._pd_values || {});
+    let val = (typeof p.def === 'string') ? numOrExpr(p.def, ctx) : Number(p.def);
+    if (!isFinite(val)) return '';
+    if (is_length_unit(p.unit)) {
+      const base = normalize_length_unit(p.unit);
+      const isFormula = (typeof p.def === 'string') && /[A-Za-z_]/.test(p.def);
+      val = isFormula ? val : to_mm(val, base);
+    }
+    return val;
+  };
 
-    return `
-      <div class="pd-item">
-        <div class="pd-inputwrap">
+  const rows = params.map(p => {
+  const key = p.key;
+  const isLen = is_length_unit(p.unit);
+  const raw_mm = current_mm[key];
+  const val_ui = isLen ? format_ui_len(raw_mm, uiUnit) : (raw_mm ?? '');
+  const dtype = p.dtype;
+  const step = (dtype === 'int') ? '1' : (isLen ? (uiUnit==='in' ? '0.001' : '0.01') : '0.01');
+  const type = (dtype === 'int' || dtype === 'float' || isLen) ? 'number' : 'text';
+  const unitBadge = isLen ? uiUnit : (p.unit || '');
+  const pattern = (uiUnit === 'in' && isLen) ? '[0-9]*[.]?[0-9]{0,3}' : '[0-9]*[.]?[0-9]*';
+  const label = p.label;
+
+  // 👇 Mostrar icono solo si existe default (número o fórmula)
+  const hasDefault = p.def !== undefined && p.def !== null && String(p.def) !== '';
+  const defaultBtn = hasDefault ? `
+    <button type="button" class="pd-reset" data-param="${key}"
+            aria-label="Restablecer al valor por defecto"
+            title="Restablecer al valor por defecto">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 4a8 8 0 1 1-7.47 10.66 1 1 0 1 1 1.9-.63A6 6 0 1 0 12 6h-1.6a1 1 0 0 1 0-2H12a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0V4z" fill="currentColor"/>
+      </svg>
+    </button>
+  ` : '';
+
+  return `
+    <div class="pd-item">
+      <div class="pd-inputwrap" style="align-items:flex-start">
+        <div class="pd-labelwrap">
           <label class="pd-label">${frappe.utils.escape_html(label)}</label>
-          <input
-            class="pd-input"
-            data-param="${key}"
-            data-islen="${isLen ? '1' : '0'}"
-            ${isDerived ? 'data-derived="1" readonly' : ''}
-            type="${type}"
-            step="${step}"
-            value="${val_ui ?? ''}"
-            inputmode="decimal"
-            pattern="${pattern}"
-          >
-          <span class="pd-unit">${frappe.utils.escape_html(unitBadge)}</span>
+          ${defaultBtn}
         </div>
+        <input
+          class="pd-input"
+          data-param="${key}"
+          data-islen="${isLen ? '1' : '0'}"
+          type="${type}"
+          step="${step}"
+          value="${val_ui ?? ''}"
+          inputmode="decimal"
+          pattern="${pattern}"
+        >
+        <span class="pd-unit">${frappe.utils.escape_html(unitBadge)}</span>
       </div>
-    `;
-  }).join('');
+    </div>`;
+}).join('');
+
 
   wrap.innerHTML = `
     <style>
-      /* Panel principal: blanco y tipografía compacta en todo el bloque */
-      .pd-panel {
-        border:1px solid #e6ecf5;
-        border-radius:8px;
-        padding:10px;
-        background:#ffffff;     /* blanco */
-        font-size:12px;         /* reduce textos generales (incluye toggle de unidades) */
-      }
+      .pd-panel { border:1px solid #e6ecf5; border-radius:8px; padding:10px; background:#ffffff; font-size:12px; }
+      .pd-grid { display:grid; grid-template-columns:repeat(10, minmax(0,1fr)); gap:8px; }
 
-      /* 10 columnas por defecto */
-      .pd-grid {
-        display:grid;
-        grid-template-columns:repeat(10, minmax(0,1fr));
-        gap:8px;                /* un poco más compacto */
-      }
+      .pd-item { position:relative; border:1px solid #e9eef8; border-radius:10px; background:#ffffff; padding:6px; }
+      .pd-item:nth-child(odd){ background:#f9fbff; border-color:#dfe8fb; }
+      .pd-item:nth-child(even){ background:#ffffff; border-color:#e9eef8; }
+      .pd-item::before{ content:""; position:absolute; inset:0 0 0 auto; width:3px; border-top-right-radius:10px; border-bottom-right-radius:10px;
+                        background:linear-gradient(180deg,#7aa2ff,#94e0ff); opacity:.25; }
+      .pd-item:nth-child(even)::before{ background:linear-gradient(180deg,#8fd2ff,#a6f7c5); }
 
-      /* Zebra + acento lateral */
-      .pd-item {
-        position:relative;
-        border:1px solid #e9eef8;
-        border-radius:10px;
-        background:#ffffff;
-        padding:6px;            /* compacto */
-      }
-      .pd-item:nth-child(odd)  { background:#f9fbff; border-color:#dfe8fb; }
-      .pd-item:nth-child(even) { background:#ffffff; border-color:#e9eef8; }
-      .pd-item::before {
-        content:"";
-        position:absolute; inset:0 0 0 auto; width:3px;
-        border-top-right-radius:10px; border-bottom-right-radius:10px;
-        background:linear-gradient(180deg,#7aa2ff,#94e0ff); opacity:0.25;
-      }
-      .pd-item:nth-child(even)::before { background:linear-gradient(180deg,#8fd2ff,#a6f7c5); }
-
-      /* Fila de cada parámetro: etiqueta al lado del input */
-      .pd-inputwrap {
-        display:flex; align-items:center; gap:6px;
-      }
-
-      /* Textos más pequeños */
+      .pd-inputwrap { display:flex; gap:6px; }
       .pd-label { font-size:11px; color:#334155; font-weight:600; white-space:nowrap; }
       .pd-unit  { font-size:11px; color:#64748b; white-space:nowrap; }
 
-      /* Inputs más pequeños (texto y padding) */
+     /* label + icono en columna compacta */
+    .pd-inputwrap { align-items:center; }
+
+    /* botón “reset a default” como icono */
+    .pd-reset{
+      appearance:none; border:none; background:transparent; padding:0;
+      width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center;
+      color:#5b7cff; opacity:.7; cursor:pointer;
+    }
+    .pd-reset:hover{ opacity:1; }
+    .pd-reset:focus{ outline:2px solid #cfe0ff; outline-offset:2px; border-radius:4px; }
+    .pd-reset svg{ display:block; width:12px; height:12px; }
+
+
       .pd-input {
-        flex:1 1 auto; min-width:0;
+        flex:0 0 auto;         /* no crecer */
+        width:40px;            /* ajusta si quieres 88/100/110px */
+        min-width:40px;
+        max-width:40px;
+
         padding:4px 6px;
         border:1px solid #d9e1ee; border-radius:6px;
         background:#fff;
-        font-size:11px;         /* tamaño de texto del input reducido */
-        height:28px;            /* compacta altura sin perder accesibilidad */
+        font-size:11px;
+        height:28px;
       }
 
-      /* Breakpoints: solo reducimos columnas cuando realmente no caben 10 */
+      /* Oculta flechas en Chrome / Edge / Safari */
+      .pd-input[type="number"]::-webkit-outer-spin-button,
+      .pd-input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+
+      /* Oculta flechas en Firefox */
+      .pd-input[type="number"] {
+        -moz-appearance: textfield;
+        appearance: textfield; /* estandar */
+      }
+
       @media (max-width:1280px){ .pd-grid{ grid-template-columns:repeat(8,minmax(0,1fr)); } }
       @media (max-width:1024px){ .pd-grid{ grid-template-columns:repeat(6,minmax(0,1fr)); } }
       @media (max-width:820px){  .pd-grid{ grid-template-columns:repeat(4,minmax(0,1fr)); } }
@@ -470,7 +504,10 @@ async function renderParamsUI(frm) {
     </div>
   `;
 
-  wrap.querySelectorAll('input[name="pd_unit_ui"]').forEach((rad) => {
+  // === Eventos ===
+
+  // Toggle de unidades
+  wrap.querySelectorAll('input[name="pd_unit_ui"]').forEach(rad => {
     rad.addEventListener('change', async () => {
       const newUnit = rad.value;
       if (frm.doc._unit_ui !== newUnit) {
@@ -481,82 +518,118 @@ async function renderParamsUI(frm) {
     });
   });
 
-  wrap.querySelectorAll('.pd-input').forEach((inp) => {
-    inp.addEventListener('keydown', (ev) => {
-      const bad = ['e', 'E', '+'];
-      if (bad.includes(ev.key)) ev.preventDefault();
-    });
+  // No permitir e/E/+ en number
+  wrap.querySelectorAll('.pd-input').forEach(inp => {
+    inp.addEventListener('keydown', (ev) => { const bad = ['e','E','+']; if (bad.includes(ev.key)) ev.preventDefault(); });
   });
 
-  wrap.querySelectorAll('.pd-input').forEach((inp) => {
-    inp.addEventListener(
-      'input',
-      frappe.utils.debounce(async () => {
-        const key = inp.getAttribute('data-param');
-        const isLen = inp.getAttribute('data-islen') === '1';
-        const raw = inp.value;
+  // Input handler: guarda valor y marca override para ese parámetro
+  wrap.querySelectorAll('.pd-input').forEach(inp => {
+    inp.addEventListener('input', frappe.utils.debounce(async () => {
+      const key = inp.getAttribute('data-param');
+      const isLen = inp.getAttribute('data-islen') === '1';
+      const raw = inp.value;
 
-        let cleaned = sanitizeNumber(raw, {
-          allowNegative: false,
-          maxDecimals: isLen && uiUnit === 'in' ? 3 : null
-        });
-        if (isLen && uiUnit === 'in') cleaned = clamp_in_decimals(cleaned);
-        if (cleaned !== raw) inp.value = cleaned;
+      let cleaned = sanitizeNumber(raw, { allowNegative: false, maxDecimals: (isLen && uiUnit === 'in') ? 3 : null });
+      if (isLen && uiUnit === 'in') cleaned = clamp_in_decimals(cleaned);
+      if (cleaned !== raw) inp.value = cleaned;
 
-        if (!frm.doc._pd_values) frm.doc._pd_values = {};
-        if (isLen) {
-          frm.doc._pd_values[key] = to_mm(cleaned, uiUnit);
-        } else {
-          const n = parseFloat(cleaned);
-          frm.doc._pd_values[key] = !isNaN(n) && cleaned !== '' ? n : '';
-        }
+      if (!frm.doc._pd_values) frm.doc._pd_values = {};
 
-        const tpl2 = await frappe.db.get_doc('PackDesign Template', frm.doc.template);
-        const hasFormulaDefault2 = Object.create(null);
-        (tpl2.parameters || []).forEach((p) => {
-          const k2 = getParamKey(p);
-          const def = p.default_value;
-          if (typeof def === 'string' && /[A-Za-z_]/.test(def)) hasFormulaDefault2[k2] = true;
-        });
+      if (isLen) {
+        frm.doc._pd_values[key] = to_mm(cleaned, uiUnit);
+      } else {
+        const n = parseFloat(cleaned);
+        frm.doc._pd_values[key] = (!isNaN(n) && cleaned !== '') ? n : '';
+      }
 
-        await recomputeDerived(frm, tpl2, hasFormulaDefault2);
-        syncHiddenValuesTable(frm, frm.doc._pd_values, tpl2);
-        renderFromGeometrySpec(frm, frm.doc._pd_values);
+      // marcar override manual
+      frm.doc._pd_overrides[key] = true;
 
-        wrap.querySelectorAll('.pd-input[data-derived="1"]').forEach((el) => {
-          const k = el.getAttribute('data-param');
-          const isLen2 = el.getAttribute('data-islen') === '1';
-          const vmm = frm.doc._pd_values[k];
-          el.value = isLen2 ? format_ui_len(vmm, uiUnit) : vmm ?? '';
-        });
-      }, 80)
-    );
+      const tpl2 = await frappe.db.get_doc('PackDesign Template', frm.doc.template);
+      const hasFormulaDefault2 = Object.create(null);
+      (tpl2.parameters || []).forEach(p => {
+        const k2 = getParamKey(p);
+        const def = p.default_value;
+        if (typeof def === 'string' && /[A-Za-z_]/.test(def)) hasFormulaDefault2[k2] = true;
+      });
+
+      await recomputeDerived(frm, tpl2, hasFormulaDefault2);
+      syncHiddenValuesTable(frm, frm.doc._pd_values, tpl2);
+      renderFromGeometrySpec(frm, frm.doc._pd_values);
+
+      // refrescar display de derivados (si no overrideados) sin re-render completo
+      wrap.querySelectorAll('.pd-input').forEach(el => {
+        const k = el.getAttribute('data-param');
+        const isL = el.getAttribute('data-islen') === '1';
+        if (frm.doc._pd_overrides[k]) return; // si está overrideado, no tocamos lo que el usuario ve
+        const vmm = frm.doc._pd_values[k];
+        el.value = isL ? format_ui_len(vmm, uiUnit) : (vmm ?? '');
+      });
+    }, 80));
   });
 
-  // Al salir del input, si la UI está en mm, normaliza a 2 dec y sin ceros finales
-  wrap.querySelectorAll('.pd-input').forEach((inp) => {
+  // Normalizar mm a 2 dec sin ceros al salir
+  wrap.querySelectorAll('.pd-input').forEach(inp => {
     inp.addEventListener('blur', () => {
       const isLen = inp.getAttribute('data-islen') === '1';
       if (!isLen || uiUnit !== 'mm') return;
-
       const raw = (inp.value || '').replace(',', '.');
       const n = parseFloat(raw);
       if (isNaN(n)) return;
-
-      // Redondeo a 2 dec y sin ceros finales
       const rounded = Math.round((n + Number.EPSILON) * 100) / 100;
       const shown = rounded.toFixed(2).replace(/\.?0+$/, '');
-
-      // Refleja en UI y dispara el flujo normal de actualización
       if (inp.value !== shown) {
         inp.value = shown;
-        // reutiliza tu handler de 'input' (debounce y recalcula derivados/preview)
         inp.dispatchEvent(new Event('input', { bubbles: true }));
       }
     });
   });
 
+  // Botón "Default": restablece un parámetro y quita override
+  wrap.querySelectorAll('.pd-reset').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const key = btn.getAttribute('data-param');
+      const p = params.find(x => x.key === key);
+      if (!p) return;
+
+      const defMM = computeDefaultMM(p);
+      if (defMM === '') return;
+
+      // fijar valor y quitar override
+      frm.doc._pd_values[key] = defMM;
+      delete frm.doc._pd_overrides[key];
+
+      // refrescar input visible con formato según unidad
+      const el = wrap.querySelector(`.pd-input[data-param="${key}"]`);
+      if (el) {
+        const isLen = el.getAttribute('data-islen') === '1';
+        el.value = isLen ? format_ui_len(defMM, uiUnit) : (defMM ?? '');
+      }
+
+      // recalcular derivados (ya que este pudo alimentar fórmulas de otros)
+      const tpl2 = await frappe.db.get_doc('PackDesign Template', frm.doc.template);
+      const hasFormulaDefault2 = Object.create(null);
+      (tpl2.parameters || []).forEach(pp => {
+        const k2 = getParamKey(pp); const def = pp.default_value;
+        if (typeof def === 'string' && /[A-Za-z_]/.test(def)) hasFormulaDefault2[k2] = true;
+      });
+
+      await recomputeDerived(frm, tpl2, hasFormulaDefault2);
+      syncHiddenValuesTable(frm, frm.doc._pd_values, tpl2);
+      renderFromGeometrySpec(frm, frm.doc._pd_values);
+
+      // refrescar mostrados (solo los no overrideados)
+      wrap.querySelectorAll('.pd-input').forEach(el2 => {
+        const k = el2.getAttribute('data-param'); const isL = el2.getAttribute('data-islen') === '1';
+        if (frm.doc._pd_overrides[k]) return;
+        const vmm = frm.doc._pd_values[k];
+        el2.value = isL ? format_ui_len(vmm, uiUnit) : (vmm ?? '');
+      });
+    });
+  });
 }
+
 
 async function renderFromGeometrySpec(frm, overrideValues = null) {
   const f = frm.get_field('preview_html');
