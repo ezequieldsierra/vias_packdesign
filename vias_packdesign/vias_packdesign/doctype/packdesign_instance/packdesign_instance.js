@@ -1,5 +1,10 @@
+/* ==========================================================================
+   PackDesign Instance – UI parámetros con Pop-out elegante
+   ========================================================================== */
+
 const MM_PER_IN = 25.4;
 
+/* ---------- Utilidades numéricas y de formato ---------- */
 function to_mm(val, unit_ui) {
   const n = parseFloat(val);
   if (isNaN(n)) return 0;
@@ -27,18 +32,15 @@ function format_ui_len(val_mm, uiUnit) {
   if (val_mm === '' || val_mm === undefined || val_mm === null) return '';
   const v = from_mm(val_mm, uiUnit);
 
-  // Inches: 3 decimales fijos
-  if (uiUnit === 'in') {
-    return Number(v).toFixed(3);
-  }
+  // en pulgadas mostramos 3 decimales fijos
+  if (uiUnit === 'in') return Number(v).toFixed(3);
 
-  // mm: redondeo a 2 decimales y sin ceros finales (2.00 -> 2)
+  // en mm redondeamos a 2 decimales y quitamos ceros sobrantes
   const n = Number(v);
   if (!isFinite(n)) return '';
-  const rounded = Math.round((n + Number.EPSILON) * 100) / 100;   // redondeo 2 dec
-  return rounded.toFixed(2).replace(/\.?0+$/, '');                // quita .00 o 0
+  const rounded = Math.round((n + Number.EPSILON) * 100) / 100;
+  return rounded.toFixed(2).replace(/\.?0+$/, '');
 }
-
 
 function clamp_in_decimals(str) {
   const m = String(str).match(/^(-?\d*)(?:\.(\d{0,3}))?/);
@@ -60,10 +62,10 @@ function sanitizeNumber(str, { allowNegative = false, maxDecimals = null } = {})
   return s;
 }
 
+/* ---------- Helpers genéricos ---------- */
 function canonKey(s) {
   return String(s || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/\s+/g, '_')
     .toLowerCase();
 }
@@ -79,9 +81,8 @@ function setCtx(ctx, key, val) {
 function buildEvalCtx(seed = {}) {
   const ctx = Object.create(null);
   const M = Math;
-  ['abs', 'ceil', 'floor', 'sqrt', 'pow', 'min', 'max', 'sin', 'cos', 'tan', 'atan2', 'PI', 'E'].forEach(
-    (n) => (ctx[n] = M[n])
-  );
+  ['abs', 'ceil', 'floor', 'sqrt', 'pow', 'min', 'max', 'sin', 'cos', 'tan', 'atan2', 'PI', 'E']
+    .forEach((n) => (ctx[n] = M[n]));
   ctx.round = (x, n = 0) => {
     const xn = Number(x);
     const nn = Number(n) || 0;
@@ -119,6 +120,7 @@ function evalStr(str, env) {
   });
 }
 
+/* ---------- Indexado de parámetros desde plantilla ---------- */
 function getParamKey(p) {
   const primary = p?.parameter || p?.label || p?.fieldname || p?.fieldname_internal || p?.name || '';
   return canonKey(primary);
@@ -131,26 +133,25 @@ function getParamLabel(p) {
 function buildParamIndex(tpl) {
   const idx = Object.create(null);
   (tpl.parameters || []).forEach((p) => {
-    const linkName = String(p?.parameter || '').trim();
-    const nameKey = canonKey(linkName);
-    const labelKey = canonKey(p?.label || '');
-    const fieldKey = canonKey(p?.fieldname || p?.fieldname_internal || '');
-    const effectiveName = linkName || String(p?.label || '').trim();
+    const linkName  = String(p?.parameter || '').trim();
+    const nameKey   = canonKey(linkName);
+    const labelKey  = canonKey(p?.label || '');
+    const fieldKey  = canonKey(p?.fieldname || p?.fieldname_internal || '');
+    const effective = linkName || String(p?.label || '').trim();
     const entry = {
-      name: effectiveName,
+      name: effective,
       label: String(p?.label || p?.parameter || '').trim(),
       unit: p?.unit,
       datatype: String(p?.datatype || '').toLowerCase(),
       fieldname: (p?.fieldname || p?.fieldname_internal || '') || '',
-      aliases: [nameKey, labelKey, fieldKey].filter(Boolean)
+      aliases: [nameKey, labelKey, fieldKey].filter(Boolean),
     };
-    entry.aliases.forEach((k) => {
-      idx[k] = entry;
-    });
+    entry.aliases.forEach((k) => (idx[k] = entry));
   });
   return idx;
 }
 
+/* ---------- Capas y estilos del preview ---------- */
 function layerVisible(tpl, layer) {
   const lname = String(layer || 'Cut').toLowerCase();
   const cmp = (tpl.components || []).find(
@@ -171,16 +172,18 @@ function layerStyle(tpl, layer) {
       String(c.layer_name || '').toLowerCase() === lname
   );
   const defaults = {
-    cut: { stroke: '#000000', strokeWidth: 0.5, dasharray: '' },
-    crease: { stroke: '#000000', strokeWidth: 0.3, dasharray: '2 2' },
-    bleed: { stroke: '#FF0000', strokeWidth: 0.25, dasharray: '' },
-    registration: { stroke: '#00AAFF', strokeWidth: 0.2, dasharray: '' },
-    guide: { stroke: '#666666', strokeWidth: 0.3, dasharray: '' }
+    cut:          { stroke: '#000000', strokeWidth: 0.5, dasharray: ''     },
+    crease:       { stroke: '#000000', strokeWidth: 0.3, dasharray: '2 2'  },
+    bleed:        { stroke: '#FF0000', strokeWidth: 0.25, dasharray: ''    },
+    registration: { stroke: '#00AAFF', strokeWidth: 0.2, dasharray: ''     },
+    guide:        { stroke: '#666666', strokeWidth: 0.3, dasharray: ''     },
   };
   const base = defaults[lname] || defaults.cut;
-  let stroke = base.stroke,
-    strokeWidth = base.strokeWidth,
-    dasharray = base.dasharray;
+
+  let stroke = base.stroke;
+  let strokeWidth = base.strokeWidth;
+  let dasharray = base.dasharray;
+
   if (cmp) {
     if (cmp.color) stroke = cmp.color;
     const lw = Number(cmp.line_width);
@@ -195,25 +198,32 @@ function strokeAttrs(st) {
   return `stroke="${st.stroke}" stroke-width="${st.strokeWidth}" vector-effect="non-scaling-stroke"${dash}`;
 }
 
+/* ---------- Sync hidden child table ---------- */
 function syncHiddenValuesTable(frm, map, tpl, full = false) {
   const fieldname = 'values';
   if (!Array.isArray(frm.doc[fieldname])) frm.doc[fieldname] = [];
+
   const paramIdx = tpl ? buildParamIndex(tpl) : {};
   const byName = Object.create(null);
   const byLabel = Object.create(null);
+
   (frm.doc[fieldname] || []).forEach((r) => {
     const kParam = canonKey(r.parameter || '');
     const kLabel = canonKey(r.label || '');
     if (kParam) byName[kParam] = r;
     if (kLabel) byLabel[kLabel] = r;
   });
+
   if (full) frm.clear_table(fieldname);
+
   Object.keys(map || {}).forEach((k) => {
     const hit = paramIdx[canonKey(k)];
     if (!hit || !hit.name) return;
+
     const nameKey = canonKey(hit.name);
     let row = null;
     if (!full) row = byName[nameKey] || byLabel[canonKey(hit.label || '')] || null;
+
     if (!row) {
       row = frm.add_child(fieldname);
       row.parameter = hit.name;
@@ -224,6 +234,7 @@ function syncHiddenValuesTable(frm, map, tpl, full = false) {
     }
     row.value = map[k];
   });
+
   if (full) {
     const keep = new Set(
       Object.keys(map || {})
@@ -233,11 +244,15 @@ function syncHiddenValuesTable(frm, map, tpl, full = false) {
         })
         .filter(Boolean)
     );
-    frm.doc[fieldname] = (frm.doc[fieldname] || []).filter((r) => keep.has(canonKey(r.parameter || '')));
+    frm.doc[fieldname] = (frm.doc[fieldname] || []).filter((r) =>
+      keep.has(canonKey(r.parameter || ''))
+    );
   }
+
   frm.refresh_field(fieldname);
 }
 
+/* ---------- Texto no escalable en SVG ---------- */
 function normalizeNonScalingText(rootSvg) {
   if (!rootSvg || !rootSvg.getCTM) return;
   const texts = rootSvg.querySelectorAll('text[data-noscale="1"]');
@@ -245,21 +260,28 @@ function normalizeNonScalingText(rootSvg) {
     try {
       const ctm = t.getCTM();
       if (!ctm) return;
-      const scale = Math.sqrt(ctm.a * ctm.a + ctm.b * ctm.b) || 1;
-      const fs = parseFloat(t.getAttribute('font-size')) || 4;
-      t.setAttribute('font-size', fs / scale);
-    } catch (e) {}
+      const scale = Math.hypot(ctm.a, ctm.b) || 1;
+
+      const origAttr = t.getAttribute('data-orig-fs');
+      const base = origAttr ? parseFloat(origAttr) :
+                  (parseFloat(t.getAttribute('font-size')) || 4);
+
+      if (!origAttr) t.setAttribute('data-orig-fs', base);
+      t.setAttribute('font-size', base / scale);
+    } catch {}
   });
 }
 
+
+/* ---------- Recalcular derivados respetando overrides ---------- */
 async function recomputeDerived(frm, tpl, hasFormulaDefault) {
   if (!frm.doc._pd_values) frm.doc._pd_values = {};
-  if (!frm.doc._pd_overrides) frm.doc._pd_overrides = {}; // mapa de overrides manuales
+  if (!frm.doc._pd_overrides) frm.doc._pd_overrides = {};
 
-  const params = (tpl.parameters || []).map(p => ({
+  const params = (tpl.parameters || []).map((p) => ({
     key: getParamKey(p),
     unit: p.unit,
-    def : p.default_value
+    def: p.default_value,
   }));
 
   for (let pass = 0; pass < 8; pass++) {
@@ -267,17 +289,16 @@ async function recomputeDerived(frm, tpl, hasFormulaDefault) {
     const ctx = buildEvalCtx(frm.doc._pd_values);
 
     for (const p of params) {
-      // Solo derivados con default tipo fórmula Y que NO estén overrideados por el usuario
       if (!hasFormulaDefault[p.key]) continue;
       if (frm.doc._pd_overrides[p.key]) continue;
 
       const def = p.def;
       if (def == null || def === '') continue;
 
-      let val = (typeof def === 'string') ? numOrExpr(def, ctx) : Number(def);
+      let val = typeof def === 'string' ? numOrExpr(def, ctx) : Number(def);
       if (!isFinite(val)) continue;
 
-      // El contexto opera en mm: las fórmulas ya están en mm
+      // contexto opera en mm
       if (frm.doc._pd_values[p.key] !== val) {
         frm.doc._pd_values[p.key] = val;
         changed = true;
@@ -287,298 +308,364 @@ async function recomputeDerived(frm, tpl, hasFormulaDefault) {
   }
 }
 
+/* ==========================================================================
+   RENDER DE PARÁMETROS – admite destino en el form o en la ventana popup
+   ========================================================================== */
+async function renderParamsUI(frm, targetDoc /* optional */) {
+  // Elegimos contenedor según destino
+  let wrap;
+  if (targetDoc) {
+    const el = targetDoc.getElementById('pd-floating-root');
+    if (!el) return;
+    wrap = el;
+  } else {
+    const holder = frm.get_field('values_html');
+    if (!holder) return;
+    wrap = holder.$wrapper.get(0);
+  }
 
-async function renderParamsUI(frm) {
-  const holder = frm.get_field('values_html'); if (!holder) return;
-  const wrap = holder.$wrapper.get(0);
+  if (!frm.doc._pd_overrides) frm.doc._pd_overrides = {};
 
-  if (!frm.doc._pd_overrides) frm.doc._pd_overrides = {}; // nuevo
+  if (!frm.doc.template) {
+    wrap.innerHTML = `<div style="color:#999">Selecciona una plantilla…</div>`;
+    return;
+  }
 
-  if (!frm.doc.template) { wrap.innerHTML = `<div style="color:#999">Selecciona una plantilla…</div>`; return; }
   const tpl = await frappe.db.get_doc('PackDesign Template', frm.doc.template);
 
-  // --- mapear defaults que son fórmula
+  // Defaults que son fórmulas
   const hasFormulaDefault = Object.create(null);
-  (tpl.parameters || []).forEach(p => {
+  (tpl.parameters || []).forEach((p) => {
     const key = getParamKey(p);
     const def = p.default_value;
-    const isFormula = (typeof def === 'string') && /[A-Za-z_]/.test(def);
+    const isFormula = typeof def === 'string' && /[A-Za-z_]/.test(def);
     if (isFormula) hasFormulaDefault[key] = true;
   });
 
   const paramIdx = buildParamIndex(tpl);
   if (!frm.doc._unit_ui) frm.doc._unit_ui = 'mm';
 
-  // limpiar _pd_values si hay claves legacy
-  if (frm.doc._pd_values && Object.keys(frm.doc._pd_values).some(k => !paramIdx[canonKey(k)])) {
+  // limpiar valores viejos si keys no existen ya
+  if (
+    frm.doc._pd_values &&
+    Object.keys(frm.doc._pd_values).some((k) => !paramIdx[canonKey(k)])
+  ) {
     frm.doc._pd_values = {};
   }
 
   const current_mm = frm.doc._pd_values || {};
 
   // 1) arrastrar desde child table (si faltan)
-  (frm.doc.values || []).forEach(v => {
+  (frm.doc.values || []).forEach((v) => {
     let kHit = '';
-    if (v.parameter) { const hit = paramIdx[canonKey(v.parameter)]; if (hit && hit.name) kHit = canonKey(hit.name); }
-    if (!kHit && v.label) { const hit = paramIdx[canonKey(v.label)]; if (hit && hit.name) kHit = canonKey(hit.name); }
+    if (v.parameter) {
+      const hit = paramIdx[canonKey(v.parameter)];
+      if (hit && hit.name) kHit = canonKey(hit.name);
+    }
+    if (!kHit && v.label) {
+      const hit = paramIdx[canonKey(v.label)];
+      if (hit && hit.name) kHit = canonKey(hit.name);
+    }
     if (!kHit) return;
-    if (current_mm[kHit] !== undefined && current_mm[kHit] !== null && current_mm[kHit] !== '') return;
+    if (current_mm[kHit] !== undefined && current_mm[kHit] !== null && current_mm[kHit] !== '')
+      return;
     const n = Number(v.value);
     if (Number.isFinite(n)) current_mm[kHit] = n;
   });
 
-  // 2) completar faltantes con defaults (multipass, soporta fórmulas)
-  const params = (tpl.parameters || []).map(p => ({
+  // 2) completar faltantes con defaults (multipass; soporta fórmulas)
+  const params = (tpl.parameters || []).map((p) => ({
     key: getParamKey(p),
     unit: p.unit,
     dtype: String(p.datatype || '').toLowerCase(),
     def: p.default_value,
-    label: getParamLabel(p)
+    label: getParamLabel(p),
   }));
-  for (let pass=0; pass<8; pass++) {
+
+  for (let pass = 0; pass < 8; pass++) {
     let changed = false;
     const ctx = buildEvalCtx(current_mm);
+
     for (const p of params) {
       if (current_mm[p.key] !== undefined && current_mm[p.key] !== '') continue;
       if (p.def === undefined || p.def === null || p.def === '') continue;
 
-      let val = (typeof p.def === 'string') ? numOrExpr(p.def, ctx) : Number(p.def);
+      let val = typeof p.def === 'string' ? numOrExpr(p.def, ctx) : Number(p.def);
       if (!isFinite(val)) continue;
 
       if (is_length_unit(p.unit)) {
         const base = normalize_length_unit(p.unit);
-        const isFormula = (typeof p.def === 'string') && /[A-Za-z_]/.test(p.def);
+        const isFormula = typeof p.def === 'string' && /[A-Za-z_]/.test(p.def);
         val = isFormula ? val : to_mm(val, base); // fórmula ya en mm
       }
-      current_mm[p.key] = val; changed = true;
+
+      current_mm[p.key] = val;
+      changed = true;
     }
     if (!changed) break;
   }
+
   frm.doc._pd_values = current_mm;
 
-  // 2.5) recalcular derivados (respetando overrides)
+  // 2.5) derivados (respetando overrides)
   await recomputeDerived(frm, tpl, hasFormulaDefault);
 
-  // 3) sincronizar child table a NAME
-  syncHiddenValuesTable(frm, frm.doc._pd_values || {}, tpl, true);
+  // 3) sync child table visible a NAME
+  // syncHiddenValuesTable(frm, frm.doc._pd_values || {}, tpl, true);
 
-  // ==== UI ====
-  const unitToggle = `
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-      <div style="font-weight:600">Parámetros</div>
-      <div style="margin-left:auto;font-size:12px">
-        Unidad de entrada:
-        <label style="margin-left:6px"><input type="radio" name="pd_unit_ui" value="mm" ${frm.doc._unit_ui==='mm'?'checked':''}/> mm</label>
-        <label style="margin-left:6px"><input type="radio" name="pd_unit_ui" value="in" ${frm.doc._unit_ui==='in'?'checked':''}/> in</label>
+  /* ---------- UI Header con Pop-out y radios ---------- */
+  const headerHTML = `
+    <div class="pd-header">
+      <div class="pd-title">
+        <span>Parámetros</span>
+        <button type="button" id="pd_popout_btn" class="pd-btn">Pop-out</button>
       </div>
-    </div>`;
-
-  const uiUnit = frm.doc._unit_ui;
-
-  // helper para evaluar default puntual (número o fórmula) en mm
-  const computeDefaultMM = (p) => {
-    const ctx = buildEvalCtx(frm.doc._pd_values || {});
-    let val = (typeof p.def === 'string') ? numOrExpr(p.def, ctx) : Number(p.def);
-    if (!isFinite(val)) return '';
-    if (is_length_unit(p.unit)) {
-      const base = normalize_length_unit(p.unit);
-      const isFormula = (typeof p.def === 'string') && /[A-Za-z_]/.test(p.def);
-      val = isFormula ? val : to_mm(val, base);
-    }
-    return val;
-  };
-
-  const rows = params.map(p => {
-  const key = p.key;
-  const isLen = is_length_unit(p.unit);
-  const raw_mm = current_mm[key];
-  const val_ui = isLen ? format_ui_len(raw_mm, uiUnit) : (raw_mm ?? '');
-  const dtype = p.dtype;
-  const step = (dtype === 'int') ? '1' : (isLen ? (uiUnit==='in' ? '0.001' : '0.01') : '0.01');
-  const type = (dtype === 'int' || dtype === 'float' || isLen) ? 'number' : 'text';
-  const unitBadge = isLen ? uiUnit : (p.unit || '');
-  const pattern = (uiUnit === 'in' && isLen) ? '[0-9]*[.]?[0-9]{0,3}' : '[0-9]*[.]?[0-9]*';
-  const label = p.label;
-
-  // 👇 Mostrar icono solo si existe default (número o fórmula)
-  const hasDefault = p.def !== undefined && p.def !== null && String(p.def) !== '';
-  const defaultBtn = hasDefault ? `
-    <button type="button" class="pd-reset" data-param="${key}"
-            aria-label="Restablecer al valor por defecto"
-            title="Restablecer al valor por defecto">
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 4a8 8 0 1 1-7.47 10.66 1 1 0 1 1 1.9-.63A6 6 0 1 0 12 6h-1.6a1 1 0 0 1 0-2H12a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0V4z" fill="currentColor"/>
-      </svg>
-    </button>
-  ` : '';
-
-  return `
-    <div class="pd-item">
-      <div class="pd-inputwrap" style="align-items:flex-start">
-        <div class="pd-labelwrap">
-          <label class="pd-label">${frappe.utils.escape_html(label)}</label>
-          ${defaultBtn}
-        </div>
-        <input
-          class="pd-input"
-          data-param="${key}"
-          data-islen="${isLen ? '1' : '0'}"
-          type="${type}"
-          step="${step}"
-          value="${val_ui ?? ''}"
-          inputmode="decimal"
-          pattern="${pattern}"
-        >
-        <span class="pd-unit">${frappe.utils.escape_html(unitBadge)}</span>
+      <div class="pd-unit">
+        <span>Unidad de entrada:</span>
+        <label class="pd-radio">
+          <input type="radio" name="pd_unit_ui" value="mm" />
+          <span>mm</span>
+        </label>
+        <label class="pd-radio">
+          <input type="radio" name="pd_unit_ui" value="in" />
+          <span>in</span>
+        </label>
       </div>
-    </div>`;
-}).join('');
-
-
-  wrap.innerHTML = `
-    <style>
-      .pd-panel { border:1px solid #e6ecf5; border-radius:8px; padding:10px; background:#ffffff; font-size:12px; }
-      .pd-grid { display:grid; grid-template-columns:repeat(10, minmax(0,1fr)); gap:8px; }
-
-      .pd-item { position:relative; border:1px solid #e9eef8; border-radius:10px; background:#ffffff; padding:6px; }
-      .pd-item:nth-child(odd){ background:#f9fbff; border-color:#dfe8fb; }
-      .pd-item:nth-child(even){ background:#ffffff; border-color:#e9eef8; }
-      .pd-item::before{ content:""; position:absolute; inset:0 0 0 auto; width:3px; border-top-right-radius:10px; border-bottom-right-radius:10px;
-                        background:linear-gradient(180deg,#7aa2ff,#94e0ff); opacity:.25; }
-      .pd-item:nth-child(even)::before{ background:linear-gradient(180deg,#8fd2ff,#a6f7c5); }
-
-      .pd-inputwrap { display:flex; gap:6px; }
-      .pd-label { font-size:11px; color:#334155; font-weight:600; white-space:nowrap; }
-      .pd-unit  { font-size:11px; color:#64748b; white-space:nowrap; }
-
-     /* label + icono en columna compacta */
-    .pd-inputwrap { align-items:center; }
-
-    /* botón “reset a default” como icono */
-    .pd-reset{
-      appearance:none; border:none; background:transparent; padding:0;
-      width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center;
-      color:#5b7cff; opacity:.7; cursor:pointer;
-    }
-    .pd-reset:hover{ opacity:1; }
-    .pd-reset:focus{ outline:2px solid #cfe0ff; outline-offset:2px; border-radius:4px; }
-    .pd-reset svg{ display:block; width:12px; height:12px; }
-
-
-      .pd-input {
-        flex:0 0 auto;         /* no crecer */
-        width:40px;            /* ajusta si quieres 88/100/110px */
-        min-width:40px;
-        max-width:40px;
-
-        padding:4px 6px;
-        border:1px solid #d9e1ee; border-radius:6px;
-        background:#fff;
-        font-size:11px;
-        height:28px;
-      }
-
-      /* Oculta flechas en Chrome / Edge / Safari */
-      .pd-input[type="number"]::-webkit-outer-spin-button,
-      .pd-input[type="number"]::-webkit-inner-spin-button {
-        -webkit-appearance: none;
-        margin: 0;
-      }
-
-      /* Oculta flechas en Firefox */
-      .pd-input[type="number"] {
-        -moz-appearance: textfield;
-        appearance: textfield; /* estandar */
-      }
-
-      @media (max-width:1280px){ .pd-grid{ grid-template-columns:repeat(8,minmax(0,1fr)); } }
-      @media (max-width:1024px){ .pd-grid{ grid-template-columns:repeat(6,minmax(0,1fr)); } }
-      @media (max-width:820px){  .pd-grid{ grid-template-columns:repeat(4,minmax(0,1fr)); } }
-      @media (max-width:640px){  .pd-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
-      @media (max-width:420px){  .pd-grid{ grid-template-columns:repeat(1,minmax(0,1fr)); } }
-    </style>
-
-    <div class="pd-panel">
-      ${unitToggle}
-      ${rows ? `<div class="pd-grid">${rows}</div>` : '<div style="color:#999">Esta plantilla no tiene parámetros.</div>'}
     </div>
   `;
 
-  // === Eventos ===
+  const uiUnit = frm.doc._unit_ui;
 
-  // Toggle de unidades
-  wrap.querySelectorAll('input[name="pd_unit_ui"]').forEach(rad => {
+  function computeDefaultMM(p) {
+    const ctx = buildEvalCtx(frm.doc._pd_values || {});
+    let val = typeof p.def === 'string' ? numOrExpr(p.def, ctx) : Number(p.def);
+    if (!isFinite(val)) return '';
+    if (is_length_unit(p.unit)) {
+      const base = normalize_length_unit(p.unit);
+      const isFormula = typeof p.def === 'string' && /[A-Za-z_]/.test(p.def);
+      val = isFormula ? val : to_mm(val, base);
+    }
+    return val;
+  }
+
+  const rowsHTML = params
+    .map((p) => {
+      const key = p.key;
+      const isLen = is_length_unit(p.unit);
+      const raw_mm = current_mm[key];
+      const val_ui = isLen ? format_ui_len(raw_mm, uiUnit) : raw_mm ?? '';
+      const dtype = p.dtype;
+      const step =
+        dtype === 'int' ? '1' : isLen ? (uiUnit === 'in' ? '0.001' : '0.01') : '0.01';
+      const type = dtype === 'int' || dtype === 'float' || isLen ? 'number' : 'text';
+      const unitBadge = isLen ? uiUnit : p.unit || '';
+      const pattern =
+        uiUnit === 'in' && isLen ? '[0-9]*[.]?[0-9]{0,3}' : '[0-9]*[.]?[0-9]*';
+      const label = p.label;
+
+      const hasDefault = p.def !== undefined && p.def !== null && String(p.def) !== '';
+      const defaultBtn = hasDefault
+        ? `
+          <button type="button" class="pd-reset" data-param="${key}" title="Restablecer por defecto">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 4a8 8 0 1 1-7.47 10.66 1 1 0 1 1 1.9-.63A6 6 0 1 0 12 6h-1.6a1 1 0 0 1 0-2H12a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0V4z" fill="currentColor"/>
+            </svg>
+          </button>
+        `
+        : '';
+
+      return `
+      <div class="pd-item">
+        <div class="pd-top">
+          <label class="pd-label">${frappe.utils.escape_html(label)}</label>
+          ${defaultBtn}
+        </div>
+
+        <div class="pd-bottom">
+          <input
+            class="pd-input"
+            data-param="${key}"
+            data-islen="${isLen ? '1' : '0'}"
+            type="${type}"
+            step="${step}"
+            value="${val_ui ?? ''}"
+            inputmode="decimal"
+            pattern="${pattern}"
+          />
+          <span class="pd-unit">${frappe.utils.escape_html(unitBadge)}</span>
+        </div>
+      </div>`;
+
+    })
+    .join('');
+
+  /* ---------- HTML completo ---------- */
+  wrap.innerHTML = `
+    <style>
+    /* Panel y cabecera más compactos */
+    .pd-panel{border:1px solid #e6ecf5;border-radius:10px;background:#fff;font-size:12px}
+    .pd-header{display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid #eef2fa}
+    .pd-title{display:flex;align-items:center;gap:6px;font-weight:600;color:#0f172a}
+    .pd-btn{appearance:none;border:1px solid #dbe3f2;background:#f7faff;padding:3px 7px;border-radius:7px;font-size:11px;cursor:pointer}
+    .pd-btn:hover{background:#f0f6ff}
+
+    /* Radios (derecha) */
+    .pd-unitbar{margin-left:auto;display:flex;align-items:center;gap:6px;color:#334155}
+    .pd-radio{display:inline-flex;align-items:center;gap:4px}
+
+    /* Grid más apretado */
+    .pd-grid{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:6px;padding:8px}
+
+    /* Tarjeta del parámetro */
+    .pd-item{
+      position:relative;border:1px solid #e9eef8;border-radius:9px;background:#fff;padding:6px;
+      display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px
+    }
+    .pd-item:nth-child(odd){background:#f9fbff;border-color:#dfe8fb}
+    .pd-item:nth-child(even){background:#fff;border-color:#e9eef8}
+    .pd-item::before{content:"";position:absolute;inset:0 0 0 auto;width:2px;border-top-right-radius:9px;border-bottom-right-radius:9px;
+                    background:linear-gradient(180deg,#7aa2ff,#94e0ff);opacity:.22}
+    .pd-item:nth-child(even)::before{background:linear-gradient(180deg,#8fd2ff,#a6f7c5)}
+
+    /* Filas arriba/abajo más bajas y alineadas */
+    .pd-top{display:flex;align-items:center;justify-content:center;gap:4px;line-height:1}
+    .pd-bottom{display:flex;align-items:center;justify-content:center;gap:4px;line-height:1}
+
+    .pd-label{font-size:11px;color:#334155;font-weight:600;line-height:1;display:inline-flex;align-items:center}
+    .pd-unitval{font-size:11px;color:#64748b;white-space:nowrap;line-height:1}
+
+    /* Botón de reset alineado con el label (nudging óptico) */
+    .pd-reset{
+      appearance:none;border:none;background:transparent;padding:0;
+      width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;
+      color:#5b7cff;opacity:.78;cursor:pointer;vertical-align:middle
+    }
+    .pd-reset:hover{opacity:1}
+    .pd-reset:focus{outline:2px solid #cfe0ff;outline-offset:2px;border-radius:4px}
+    .pd-reset svg{display:block;width:11px;height:11px;transform:translateY(-0.5px)}
+
+    /* Inputs más bajos y angostos (ajusta solo esta variable) */
+    :root{--pd-input-w:48px}
+
+    .pd-input{
+      flex:0 0 auto;width:var(--pd-input-w);min-width:var(--pd-input-w);max-width:calc(var(--pd-input-w) + 8px);
+      padding:3px 6px;border:1px solid #d9e1ee;border-radius:6px;background:#fff;font-size:11px;height:24px;text-align:center;line-height:1
+    }
+
+    /* Oculta flechas numéricas */
+    .pd-input[type=number]::-webkit-outer-spin-button,
+    .pd-input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+    .pd-input[type=number]{-moz-appearance:textfield;appearance:textfield}
+
+    /* Responsivo */
+    @media (max-width:1280px){.pd-grid{grid-template-columns:repeat(8,minmax(0,1fr))}}
+    @media (max-width:1024px){.pd-grid{grid-template-columns:repeat(6,minmax(0,1fr))}}
+    @media (max-width:820px){.pd-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+    @media (max-width:640px){.pd-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media (max-width:420px){.pd-grid{grid-template-columns:repeat(1,minmax(0,1fr))}}
+  </style>
+  <div class="pd-panel">
+    ${headerHTML}
+    ${rowsHTML ? `<div class="pd-grid">${rowsHTML}</div>` : '<div style="color:#999;padding:10px">Esta plantilla no tiene parámetros.</div>'}
+  </div>
+  `;
+
+  /* ---------- Estado inicial de radios (sin checked inline) ---------- */
+  const radios = wrap.querySelectorAll('input[name="pd_unit_ui"]');
+  radios.forEach((r) => (r.checked = r.value === frm.doc._unit_ui));
+
+  /* ---------- Pop-out ---------- */
+  const popBtn = wrap.querySelector('#pd_popout_btn');
+  if (!targetDoc && popBtn) {
+    popBtn.addEventListener('click', () => _pd_open_popup(frm));
+  }
+
+  /* ---------- Eventos de UI ---------- */
+
+  // Cambio de unidad
+  wrap.querySelectorAll('input[name="pd_unit_ui"]').forEach((rad) => {
     rad.addEventListener('change', async () => {
       const newUnit = rad.value;
       if (frm.doc._unit_ui !== newUnit) {
         frm.doc._unit_ui = newUnit;
-        await renderParamsUI(frm);
+        // re-render en el mismo destino (main o popup)
+        await renderParamsUI(frm, targetDoc || null);
         renderFromGeometrySpec(frm, frm.doc._pd_values);
       }
     });
   });
 
-  // No permitir e/E/+ en number
-  wrap.querySelectorAll('.pd-input').forEach(inp => {
-    inp.addEventListener('keydown', (ev) => { const bad = ['e','E','+']; if (bad.includes(ev.key)) ev.preventDefault(); });
+  // Bloquear e/E/+ en number
+  wrap.querySelectorAll('.pd-input').forEach((inp) => {
+    inp.addEventListener('keydown', (ev) => {
+      const bad = ['e', 'E', '+'];
+      if (bad.includes(ev.key)) ev.preventDefault();
+    });
   });
 
-  // Input handler: guarda valor y marca override para ese parámetro
-  wrap.querySelectorAll('.pd-input').forEach(inp => {
-    inp.addEventListener('input', frappe.utils.debounce(async () => {
-      const key = inp.getAttribute('data-param');
-      const isLen = inp.getAttribute('data-islen') === '1';
-      const raw = inp.value;
+  // Input handler
+  wrap.querySelectorAll('.pd-input').forEach((inp) => {
+    inp.addEventListener(
+      'input',
+      frappe.utils.debounce(async () => {
+        const key   = inp.getAttribute('data-param');
+        const isLen = inp.getAttribute('data-islen') === '1';
+        const raw   = inp.value;
 
-      let cleaned = sanitizeNumber(raw, { allowNegative: false, maxDecimals: (isLen && uiUnit === 'in') ? 3 : null });
-      if (isLen && uiUnit === 'in') cleaned = clamp_in_decimals(cleaned);
-      if (cleaned !== raw) inp.value = cleaned;
+        let cleaned = sanitizeNumber(raw, {
+          allowNegative: false,
+          maxDecimals: isLen && (frm.doc._unit_ui === 'in') ? 3 : null,
+        });
+        if (isLen && frm.doc._unit_ui === 'in') cleaned = clamp_in_decimals(cleaned);
+        if (cleaned !== raw) inp.value = cleaned;
 
-      if (!frm.doc._pd_values) frm.doc._pd_values = {};
+        if (!frm.doc._pd_values) frm.doc._pd_values = {};
 
-      if (isLen) {
-        frm.doc._pd_values[key] = to_mm(cleaned, uiUnit);
-      } else {
-        const n = parseFloat(cleaned);
-        frm.doc._pd_values[key] = (!isNaN(n) && cleaned !== '') ? n : '';
-      }
+        if (isLen) {
+          frm.doc._pd_values[key] = to_mm(cleaned, frm.doc._unit_ui);
+        } else {
+          const n = parseFloat(cleaned);
+          frm.doc._pd_values[key] = !isNaN(n) && cleaned !== '' ? n : '';
+        }
 
-      // marcar override manual
-      frm.doc._pd_overrides[key] = true;
+        // marcar override
+        if (!frm.doc._pd_overrides) frm.doc._pd_overrides = {};
+        frm.doc._pd_overrides[key] = true;
 
-      const tpl2 = await frappe.db.get_doc('PackDesign Template', frm.doc.template);
-      const hasFormulaDefault2 = Object.create(null);
-      (tpl2.parameters || []).forEach(p => {
-        const k2 = getParamKey(p);
-        const def = p.default_value;
-        if (typeof def === 'string' && /[A-Za-z_]/.test(def)) hasFormulaDefault2[k2] = true;
-      });
+        const tpl2 = await frappe.db.get_doc('PackDesign Template', frm.doc.template);
+        const hasFormulaDefault2 = Object.create(null);
+        (tpl2.parameters || []).forEach((p) => {
+          const k2  = getParamKey(p);
+          const def = p.default_value;
+          if (typeof def === 'string' && /[A-Za-z_]/.test(def)) hasFormulaDefault2[k2] = true;
+        });
 
-      await recomputeDerived(frm, tpl2, hasFormulaDefault2);
-      syncHiddenValuesTable(frm, frm.doc._pd_values, tpl2);
-      renderFromGeometrySpec(frm, frm.doc._pd_values);
+        await recomputeDerived(frm, tpl2, hasFormulaDefault2);
+        syncHiddenValuesTable(frm, frm.doc._pd_values, tpl2);
+        renderFromGeometrySpec(frm, frm.doc._pd_values);
 
-      // refrescar display de derivados (si no overrideados) sin re-render completo
-      wrap.querySelectorAll('.pd-input').forEach(el => {
-        const k = el.getAttribute('data-param');
-        const isL = el.getAttribute('data-islen') === '1';
-        if (frm.doc._pd_overrides[k]) return; // si está overrideado, no tocamos lo que el usuario ve
-        const vmm = frm.doc._pd_values[k];
-        el.value = isL ? format_ui_len(vmm, uiUnit) : (vmm ?? '');
-      });
-    }, 80));
+        // refrescar los no overrideados sin re-render completo
+        wrap.querySelectorAll('.pd-input').forEach((el) => {
+          const k   = el.getAttribute('data-param');
+          const isL = el.getAttribute('data-islen') === '1';
+          if (frm.doc._pd_overrides[k]) return;
+          const vmm = frm.doc._pd_values[k];
+          el.value  = isL ? format_ui_len(vmm, frm.doc._unit_ui) : (vmm ?? '');
+        });
+      }, 80)
+    );
   });
 
-  // Normalizar mm a 2 dec sin ceros al salir
-  wrap.querySelectorAll('.pd-input').forEach(inp => {
+  // Normalizar mm (2 dec) al blur
+  wrap.querySelectorAll('.pd-input').forEach((inp) => {
     inp.addEventListener('blur', () => {
       const isLen = inp.getAttribute('data-islen') === '1';
-      if (!isLen || uiUnit !== 'mm') return;
+      if (!isLen || frm.doc._unit_ui !== 'mm') return;
       const raw = (inp.value || '').replace(',', '.');
-      const n = parseFloat(raw);
+      const n   = parseFloat(raw);
       if (isNaN(n)) return;
       const rounded = Math.round((n + Number.EPSILON) * 100) / 100;
-      const shown = rounded.toFixed(2).replace(/\.?0+$/, '');
+      const shown   = rounded.toFixed(2).replace(/\.?0+$/, '');
       if (inp.value !== shown) {
         inp.value = shown;
         inp.dispatchEvent(new Event('input', { bubbles: true }));
@@ -586,32 +673,30 @@ async function renderParamsUI(frm) {
     });
   });
 
-  // Botón "Default": restablece un parámetro y quita override
-  wrap.querySelectorAll('.pd-reset').forEach(btn => {
+  // Botón “Default”
+  wrap.querySelectorAll('.pd-reset').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const key = btn.getAttribute('data-param');
-      const p = params.find(x => x.key === key);
+      const p   = params.find((x) => x.key === key);
       if (!p) return;
 
       const defMM = computeDefaultMM(p);
       if (defMM === '') return;
 
-      // fijar valor y quitar override
       frm.doc._pd_values[key] = defMM;
-      delete frm.doc._pd_overrides[key];
+      if (frm.doc._pd_overrides) delete frm.doc._pd_overrides[key];
 
-      // refrescar input visible con formato según unidad
       const el = wrap.querySelector(`.pd-input[data-param="${key}"]`);
       if (el) {
         const isLen = el.getAttribute('data-islen') === '1';
-        el.value = isLen ? format_ui_len(defMM, uiUnit) : (defMM ?? '');
+        el.value = isLen ? format_ui_len(defMM, frm.doc._unit_ui) : (defMM ?? '');
       }
 
-      // recalcular derivados (ya que este pudo alimentar fórmulas de otros)
       const tpl2 = await frappe.db.get_doc('PackDesign Template', frm.doc.template);
       const hasFormulaDefault2 = Object.create(null);
-      (tpl2.parameters || []).forEach(pp => {
-        const k2 = getParamKey(pp); const def = pp.default_value;
+      (tpl2.parameters || []).forEach((pp) => {
+        const k2  = getParamKey(pp);
+        const def = pp.default_value;
         if (typeof def === 'string' && /[A-Za-z_]/.test(def)) hasFormulaDefault2[k2] = true;
       });
 
@@ -619,18 +704,20 @@ async function renderParamsUI(frm) {
       syncHiddenValuesTable(frm, frm.doc._pd_values, tpl2);
       renderFromGeometrySpec(frm, frm.doc._pd_values);
 
-      // refrescar mostrados (solo los no overrideados)
-      wrap.querySelectorAll('.pd-input').forEach(el2 => {
-        const k = el2.getAttribute('data-param'); const isL = el2.getAttribute('data-islen') === '1';
-        if (frm.doc._pd_overrides[k]) return;
+      wrap.querySelectorAll('.pd-input').forEach((el2) => {
+        const k   = el2.getAttribute('data-param');
+        const isL = el2.getAttribute('data-islen') === '1';
+        if (frm.doc._pd_overrides && frm.doc._pd_overrides[k]) return;
         const vmm = frm.doc._pd_values[k];
-        el2.value = isL ? format_ui_len(vmm, uiUnit) : (vmm ?? '');
+        el2.value = isL ? format_ui_len(vmm, frm.doc._unit_ui) : (vmm ?? '');
       });
     });
   });
 }
 
-
+/* ==========================================================================
+   PREVIEW desde Geometry Spec (igual que tenías)
+   ========================================================================== */
 async function renderFromGeometrySpec(frm, overrideValues = null) {
   const f = frm.get_field('preview_html');
   if (!f) return;
@@ -652,12 +739,17 @@ async function renderFromGeometrySpec(frm, overrideValues = null) {
   try {
     spec = JSON.parse(spec_text);
   } catch (e) {
-    f.$wrapper[0].innerHTML = `<div style="padding:8px;border:1px solid #ffd1d1;background:#fff3f3;border-radius:6px;color:#a40000"><b>Geometry Spec no es JSON válido.</b><div style="margin-top:4px;font-family:monospace">${frappe.utils.escape_html(
-      String(e?.message || e)
-    )}</div></div>`;
+    f.$wrapper[0].innerHTML = `
+      <div style="padding:8px;border:1px solid #ffd1d1;background:#fff3f3;border-radius:6px;color:#a40000">
+        <b>Geometry Spec no es JSON válido.</b>
+        <div style="margin-top:4px;font-family:monospace">
+          ${frappe.utils.escape_html(String(e?.message || e))}
+        </div>
+      </div>`;
     return;
   }
 
+  // --- preparar ctx de valores ---
   let values = {};
   const tplIdx = buildParamIndex(tpl);
 
@@ -666,9 +758,7 @@ async function renderFromGeometrySpec(frm, overrideValues = null) {
     for (const [k, v] of Object.entries(overrideValues)) {
       const hit = tplIdx[canonKey(k)];
       if (hit) {
-        hit.aliases.forEach((a) => {
-          expanded[a] = v;
-        });
+        hit.aliases.forEach((a) => (expanded[a] = v));
         if (hit.fieldname) expanded[canonKey(hit.fieldname)] = v;
       }
       expanded[canonKey(k)] = v;
@@ -681,23 +771,22 @@ async function renderFromGeometrySpec(frm, overrideValues = null) {
       const hit = tplIdx[kParam] || tplIdx[kLabel];
       const n = Number(v.value);
       if (!hit || !isFinite(n)) return;
-      hit.aliases.forEach((a) => {
-        values[a] = n;
-      });
+      hit.aliases.forEach((a) => (values[a] = n));
       if (hit.fieldname) values[canonKey(hit.fieldname)] = n;
     });
   }
 
   const ctx = buildEvalCtx(values);
   ctx.unit_ui = frm.doc._unit_ui || 'mm';
-  ctx.unit = () => ctx.unit_ui;
-  ctx.ui = (val_mm, dec = 2) => {
+  ctx.unit    = () => ctx.unit_ui;
+  ctx.ui      = (val_mm, dec = 2) => {
     const x = parseFloat(val_mm);
     if (isNaN(x)) return '';
     const out = ctx.unit_ui === 'in' ? x / 25.4 : x;
     return Number(out).toFixed(dec);
   };
 
+  // vars evaluadas multipass
   if (spec.vars && typeof spec.vars === 'object') {
     for (let pass = 0; pass < 8; pass++) {
       let changed = false;
@@ -712,8 +801,8 @@ async function renderFromGeometrySpec(frm, overrideValues = null) {
     }
   }
 
+  // bbox helpers
   const margin = numOrExpr(spec.canvas?.margin ?? 10, ctx);
-
   let bbox = { minx: +Infinity, miny: +Infinity, maxx: -Infinity, maxy: -Infinity };
   const pushBBoxCircle = (cx, cy, r) => {
     bbox.minx = Math.min(bbox.minx, cx - r);
@@ -734,6 +823,7 @@ async function renderFromGeometrySpec(frm, overrideValues = null) {
     bbox.maxy = Math.max(bbox.maxy, y1, y2);
   };
 
+  // build shapes
   const out = [];
   let emit = (el) => out.push(el);
 
@@ -746,16 +836,16 @@ async function renderFromGeometrySpec(frm, overrideValues = null) {
       case 'circle': {
         const cx = numOrExpr(s.cx || 0, env);
         const cy = numOrExpr(s.cy || 0, env);
-        const r = numOrExpr(s.r || 0, env);
+        const r  = numOrExpr(s.r  || 0, env);
         pushBBoxCircle(cx, cy, r);
         emit(`<g data-layer="${layer}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" ${strokeAttrs(st)} /></g>`);
         break;
       }
       case 'rect': {
-        const x = numOrExpr(s.x || 0, env);
-        const y = numOrExpr(s.y || 0, env);
-        const w = numOrExpr(s.w || 0, env);
-        const h = numOrExpr(s.h || 0, env);
+        const x  = numOrExpr(s.x  || 0, env);
+        const y  = numOrExpr(s.y  || 0, env);
+        const w  = numOrExpr(s.w  || 0, env);
+        const h  = numOrExpr(s.h  || 0, env);
         const rx = numOrExpr(s.rx || 0, env);
         pushBBoxRect(x, y, w, h);
         emit(`<g data-layer="${layer}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="none" ${strokeAttrs(st)} /></g>`);
@@ -767,7 +857,9 @@ async function renderFromGeometrySpec(frm, overrideValues = null) {
         const x2 = numOrExpr(s.x2 || 0, env);
         const y2 = numOrExpr(s.y2 || 0, env);
         pushBBoxLine(x1, y1, x2, y2);
-        const markers = s.dim || s.marker === 'dim' ? ` marker-start="url(#pd_dim_arrow_start)" marker-end="url(#pd_dim_arrow_end)"` : '';
+        const markers = s.dim || s.marker === 'dim'
+          ? ` marker-start="url(#pd_dim_arrow_start)" marker-end="url(#pd_dim_arrow_end)"`
+          : '';
         emit(`<g data-layer="${layer}"><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" ${strokeAttrs(st)}${markers} /></g>`);
         break;
       }
@@ -784,6 +876,22 @@ async function renderFromGeometrySpec(frm, overrideValues = null) {
         emit(`<g data-layer="${layer}"><polyline points="${pts}" fill="none" ${strokeAttrs(st)} /></g>`);
         break;
       }
+
+      case 'arc': {
+        // arco por extremos + radio (un sólo cuadrante típico de solapa)
+        const x1 = numOrExpr(s.x1 || 0, env);
+        const y1 = numOrExpr(s.y1 || 0, env);
+        const x2 = numOrExpr(s.x2 || 0, env);
+        const y2 = numOrExpr(s.y2 || 0, env);
+        const r  = Math.max(0.001, numOrExpr(s.r || s.radius || 0, env)); // clamp si r=0
+        const laf = s.large ? 1 : 0;      // large-arc-flag  (0: arco corto)
+        const sf  = s.sweep ? 1 : 0;      // sweep-flag      (1: sentido horario)
+        pushBBoxLine(x1, y1, x2, y2);
+        pushBBoxCircle((x1+x2)/2, (y1+y2)/2, r); // bounding aprox
+        emit(`<g data-layer="${layer}"><path d="M ${x1} ${y1} A ${r} ${r} 0 ${laf} ${sf} ${x2} ${y2}" fill="none" ${strokeAttrs(st)} /></g>`);
+        break;
+      }
+
       case 'path': {
         const d = (s.d || []).map((cmd) => evalStr(cmd, env)).join(' ');
         let fill = 'none';
@@ -793,8 +901,8 @@ async function renderFromGeometrySpec(frm, overrideValues = null) {
         break;
       }
       case 'text': {
-        const x = numOrExpr(s.x || 0, env);
-        const y = numOrExpr(s.y || 0, env);
+        const x  = numOrExpr(s.x || 0, env);
+        const y  = numOrExpr(s.y || 0, env);
         const fs = numOrExpr(s.font_size || 4, env);
         const evalAny = (expr, env2) => {
           try {
@@ -809,15 +917,11 @@ async function renderFromGeometrySpec(frm, overrideValues = null) {
           typeof s.content === 'string'
             ? s.content.replace(/\{([^}]+)\}/g, (_, ex) => evalAny(ex, env))
             : String(s.content ?? '');
-        const anchor = s.anchor || 'start';
-        const baseline = s.baseline || 'alphabetic';
-        const rot = numOrExpr(s.rotate ?? s.rotation ?? s.angle ?? 0, env);
-        const transformAttr = isFinite(rot) && rot !== 0 ? ` transform="rotate(${rot} ${x} ${y})"` : '';
-        emit(
-          `<g data-layer="${layer}"><text data-noscale="1" x="${x}" y="${y}" font-size="${fs}" text-anchor="${anchor}" dominant-baseline="${baseline}" fill="${st.stroke}" stroke="none"${transformAttr}>${frappe.utils.escape_html(
-            content
-          )}</text></g>`
-        );
+        const anchor    = s.anchor   || 'start';
+        const baseline  = s.baseline || 'alphabetic';
+        const rot       = numOrExpr(s.rotate ?? s.rotation ?? s.angle ?? 0, env);
+        const transform = isFinite(rot) && rot !== 0 ? ` transform="rotate(${rot} ${x} ${y})"` : '';
+        emit(`<g data-layer="${layer}"><text data-noscale="1" x="${x}" y="${y}" font-size="${fs}" text-anchor="${anchor}" dominant-baseline="${baseline}" fill="${st.stroke}" stroke="none"${transform}>${frappe.utils.escape_html(content)}</text></g>`);
         break;
       }
       case 'group': {
@@ -838,9 +942,7 @@ async function renderFromGeometrySpec(frm, overrideValues = null) {
       case 'repeat': {
         const m = String(s.for || '').match(/^\s*([a-zA-Z_]\w*)\s*=\s*(\d+)\s*\.\.\s*(\d+)\s*$/);
         if (m) {
-          const varname = m[1],
-            from = parseInt(m[2], 10),
-            to = parseInt(m[3], 10);
+          const varname = m[1], from = parseInt(m[2], 10), to = parseInt(m[3], 10);
           for (let i = from; i <= to; i++) {
             const env2 = Object.assign(Object.create(null), env);
             env2[varname] = i;
@@ -870,12 +972,11 @@ async function renderFromGeometrySpec(frm, overrideValues = null) {
   const vb = {
     minx: bbox.minx - margin,
     miny: bbox.miny - margin,
-    w: bbox.maxx - bbox.minx + margin * 2,
-    h: bbox.maxy - bbox.miny + margin * 2
+    w:    bbox.maxx - bbox.minx + margin * 2,
+    h:    bbox.maxy - bbox.miny + margin * 2,
   };
 
   const guideStyle = layerStyle(tpl, 'Guide');
-
   const defs = `
     <defs>
       <marker id="pd_dim_arrow_start" viewBox="-6 0 6 6" refX="-6" refY="3" markerWidth="6" markerHeight="6" orient="auto" markerUnits="strokeWidth">
@@ -888,7 +989,6 @@ async function renderFromGeometrySpec(frm, overrideValues = null) {
   `;
 
   const guideOn = layerVisible(tpl, 'Guide');
-
   const controls = `
     <div style="margin:6px 0 4px">
       <label style="font:12px/1.4 Inter,system-ui,sans-serif">
@@ -899,7 +999,9 @@ async function renderFromGeometrySpec(frm, overrideValues = null) {
   `;
 
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb.minx} ${vb.miny} ${vb.w} ${vb.h}" width="100%" preserveAspectRatio="xMidYMid meet" style="height:auto;display:block">
+    <svg xmlns="http://www.w3.org/2000/svg"
+         viewBox="${vb.minx} ${vb.miny} ${vb.w} ${vb.h}"
+         width="100%" preserveAspectRatio="xMidYMid meet" style="height:auto;display:block">
       ${defs}
       <rect x="${vb.minx}" y="${vb.miny}" width="${vb.w}" height="${vb.h}" fill="white" stroke="#e6ecf5" stroke-width="0.2"/>
       ${out.join('\n')}
@@ -926,41 +1028,219 @@ async function renderFromGeometrySpec(frm, overrideValues = null) {
   }
 }
 
-function _pd_get_current_svg_and_size(frm) {
+/* ==========================================================================
+   POP-OUT elegante (mueve la tabla fuera del form y la regresa)
+   ========================================================================== */
+
+function _pd_resize_popup_to_content(win) {
+  try {
+    const root = win.document.getElementById('pd-floating-root');
+    if (!root) return;
+
+    const pad = 24; // margen extra
+    const rect = root.getBoundingClientRect();
+    const w = Math.min(Math.max(520, Math.ceil(rect.width)  + pad), Math.max(600, window.screen.availWidth  - 40));
+    const h = Math.min(Math.max(320, Math.ceil(rect.height) + pad + 48), Math.max(400, window.screen.availHeight - 80));
+    win.resizeTo(w, h);
+
+    const left = Math.max(0, (window.screen.availWidth  - w) / 2);
+    const top  = Math.max(0, (window.screen.availHeight - h) / 3);
+    win.moveTo(left, top);
+  } catch {}
+}
+
+function _pd_set_main_placeholder(frm) {
+  const holder = frm.get_field('values_html');
+  if (!holder) return;
+  const wrap = holder.$wrapper.get(0);
+  wrap.innerHTML = `
+    <div class="pd-panel" style="border:1px dashed #cbd5e1;border-radius:10px;padding:12px;background:#fbfdff">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="font-weight:600;color:#334155">Parámetros abiertos en ventana</div>
+        <div style="margin-left:auto">
+          <button type="button" id="pd_return_here"
+                  style="appearance:none;border:1px solid #cfe0ff;background:#f4f8ff;
+                         padding:6px 10px;border-radius:8px;font-size:12px;cursor:pointer;">
+            Regresar aquí
+          </button>
+        </div>
+      </div>
+      <div style="font-size:12px;color:#64748b;margin-top:6px">
+        Puedes seguir usando el documento. Haz clic en “Regresar aquí” para traer la tabla otra vez.
+      </div>
+    </div>
+  `;
+  const btn = wrap.querySelector('#pd_return_here');
+  if (btn) btn.addEventListener('click', () => _pd_return_to_form(frm));
+}
+
+function _pd_clear_main_placeholder(frm) {
+  const holder = frm.get_field('values_html');
+  if (!holder) return;
+  const wrap = holder.$wrapper.get(0);
+  wrap.innerHTML = '';
+}
+
+function _pd_return_to_form(frm) {
+  try { if (frm.__pd_popup && !frm.__pd_popup.closed) frm.__pd_popup.close(); } catch {}
+  frm.__pd_popup = null;
+  _pd_clear_main_placeholder(frm);
+  renderParamsUI(frm).then(() => renderFromGeometrySpec(frm, frm.doc._pd_values || {}));
+}
+
+function _pd_close_popup(frm) {
+  try { if (frm.__pd_popup && !frm.__pd_popup.closed) frm.__pd_popup.close(); } catch {}
+  frm.__pd_popup = null;
+  _pd_clear_main_placeholder(frm);
+  renderParamsUI(frm).then(() => renderFromGeometrySpec(frm, frm.doc._pd_values || {}));
+}
+
+async function _pd_open_popup(frm) {
+  // si ya está abierta, enfocar
+  if (frm.__pd_popup && !frm.__pd_popup.closed) { frm.__pd_popup.focus(); return; }
+
+  // poner placeholder en el form (la tabla “sale”)
+  _pd_set_main_placeholder(frm);
+
+  // abrir ventana (se ajustará al contenido luego)
+  const win = window.open('', 'PDParamsPopup', 'popup=yes,width=640,height=420,resizable=yes,scrollbars=yes');
+  if (!win) {
+    frappe.msgprint('El navegador bloqueó la ventana emergente. Habilita popups para este sitio.');
+    _pd_clear_main_placeholder(frm);
+    await renderParamsUI(frm);
+    return;
+  }
+  frm.__pd_popup = win;
+
+  // UI del popup (estilo app)
+  win.document.title = `Parámetros — ${frm.doc.name || ''}`;
+  win.document.body.style.margin = '0';
+  win.document.body.style.background = '#f6f8fb';
+  win.document.body.innerHTML = `
+    <div style="position:sticky;top:0;z-index:10;background:#ffffff;border-bottom:1px solid #e5eaf3;
+                display:flex;align-items:center;gap:10px;padding:10px 12px">
+      <button id="pd_back_btn"
+              style="appearance:none;border:1px solid #dbe3f2;background:#f7faff;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:12px">
+        ← Regresar
+      </button>
+      <div style="margin-left:auto;color:#64748b;font-size:12px">${frappe.utils.escape_html(frm.doc.name || '')}</div>
+    </div>
+    <div id="pd-floating-root" style="padding:10px;font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif"></div>
+  `;
+
+  // renderizar parámetros dentro del popup
+  await renderParamsUI(frm, win.document);
+
+  // ajustar tamaño al contenido
+  _pd_resize_popup_to_content(win);
+  // volver a ajustar si cambian los radios/inputs (por si crece)
+  const observer = new win.MutationObserver(() => _pd_resize_popup_to_content(win));
+  observer.observe(win.document.getElementById('pd-floating-root'), { childList: true, subtree: true });
+
+  // botón regresar
+  win.document.getElementById('pd_back_btn')?.addEventListener('click', () => {
+    if (window && typeof window._pd_return_to_form === 'function') {
+      // no confíes en esto entre orígenes; aquí es mismo origen
+    }
+    _pd_return_to_form(frm);
+  });
+
+  // cerrar cuando se cierre el padre o cambie la ruta
+  const onUnload = () => _pd_close_popup(frm);
+  window.addEventListener('beforeunload', onUnload);
+
+  const routeGuard = () => _pd_close_popup(frm);
+  if (frappe.router && typeof frappe.router.on === 'function') {
+    frm.__pd_router_unsub = frappe.router.on('change', routeGuard);
+  } else {
+    frm.__pd_hash_listener = () => routeGuard();
+    window.addEventListener('hashchange', frm.__pd_hash_listener);
+  }
+
+  // si usuario cierra manualmente la ventana, limpiar y reponer en el form
+  const timer = setInterval(() => {
+    if (!frm.__pd_popup || frm.__pd_popup.closed) {
+      clearInterval(timer);
+      observer.disconnect();
+      window.removeEventListener('beforeunload', onUnload);
+      if (frm.__pd_router_unsub) { try { frm.__pd_router_unsub(); } catch {} }
+      if (frm.__pd_hash_listener) window.removeEventListener('hashchange', frm.__pd_hash_listener);
+      frm.__pd_router_unsub = null;
+      frm.__pd_hash_listener = null;
+      frm.__pd_popup = null;
+      _pd_clear_main_placeholder(frm);
+      renderParamsUI(frm).then(() => renderFromGeometrySpec(frm, frm.doc._pd_values || {}));
+    }
+  }, 600);
+}
+
+/* ==========================================================================
+   Export helpers (sin cambios relevantes)
+   ========================================================================== */
+function _pd_get_current_svg_and_size(frm, { stripGuides = false } = {}) {
   const host = frm.get_field('preview_html')?.$wrapper?.[0];
   if (!host) throw new Error('No hay vista previa');
+
   const svgEl = host.querySelector('svg');
   if (!svgEl) throw new Error('No se encontró el SVG del preview');
+
   const vb = (svgEl.getAttribute('viewBox') || '').trim().split(/\s+/).map(Number);
-  if (vb.length !== 4 || vb.some((v) => !isFinite(v))) {
-    throw new Error('El SVG no tiene viewBox válido');
-  }
-  const width_mm = vb[2];
+  if (vb.length !== 4 || vb.some((v) => !isFinite(v))) throw new Error('El SVG no tiene viewBox válido');
+
+  const width_mm  = vb[2];
   const height_mm = vb[3];
-  const svg = new XMLSerializer().serializeToString(svgEl);
-  const raw = frm.doc.template || frm.doc.name || 'PackDesign';
-  const basename = String(raw).trim().replace(/[\\/:*?"<>|]+/g, '_');
+  const raw       = frm.doc.template || frm.doc.name || 'PackDesign';
+  const basename  = String(raw).trim().replace(/[\\/:*?"<>|]+/g, '_');
+
+  const clone = svgEl.cloneNode(true);
+
+  if (stripGuides) {
+    // Quitar cualquier nodo cuyo data-layer sea "guide" sin importar mayúsculas/minúsculas
+    clone.querySelectorAll('[data-layer]').forEach((el) => {
+      const v = String(el.getAttribute('data-layer') || '').trim().toLowerCase();
+      if (v === 'guide') el.remove();
+    });
+    // Quitar marcadores de dimensión si quedaron huérfanos
+    const stillHasGuides = clone.querySelector('[data-layer="Guide"],[data-layer="guide"]');
+    if (!stillHasGuides) {
+      const defs = clone.querySelector('defs');
+      if (defs) {
+        defs.querySelector('#pd_dim_arrow_start')?.remove();
+        defs.querySelector('#pd_dim_arrow_end')?.remove();
+      }
+    }
+  }
+
+  const svg = new XMLSerializer().serializeToString(clone);
   return { svgEl, svg, width_mm, height_mm, basename };
+}
+
+
+function _pd_guides_checked(frm) {
+  const host = frm.get_field('preview_html')?.$wrapper?.[0];
+  const cb = host ? host.querySelector('#pd_toggle_guide') : null;
+  return !!(cb && cb.checked);
 }
 
 async function exportPDF(frm) {
   try {
     frappe.dom.freeze('Generando PDF…');
-    const { svg, width_mm, height_mm, basename } = _pd_get_current_svg_and_size(frm);
+    const stripGuides = !_pd_guides_checked(frm);
+    const { svg, width_mm, height_mm, basename } =
+      _pd_get_current_svg_and_size(frm, { stripGuides });
     const r = await frappe.call({
       method: 'vias_packdesign.api.packdesign_pdf.export_packdesign_instance_pdf',
       type: 'POST',
       args: { docname: frm.doc.name, svg, width_mm, height_mm, filename: basename + '.pdf', is_private: 0 },
       freeze: true,
-      freeze_message: 'Convirtiendo SVG a PDF…'
+      freeze_message: 'Convirtiendo SVG a PDF…',
     });
     const url = r?.message?.file_url;
     if (!url) throw new Error('No se recibió file_url');
     frappe.show_alert({ message: `PDF creado: <a target="_blank" href="${url}">${basename}.pdf</a>`, indicator: 'green' });
     window.open(url, '_blank');
   } catch (e) {
-    console.error(e);
-    frappe.msgprint('PDF: ' + (e.message || e));
+    console.error(e); frappe.msgprint('PDF: ' + (e.message || e));
   } finally {
     frappe.dom.unfreeze();
   }
@@ -969,20 +1249,21 @@ async function exportPDF(frm) {
 async function exportSVG(frm) {
   try {
     frappe.dom.freeze('Guardando SVG…');
-    const { svg, width_mm, height_mm, basename } = _pd_get_current_svg_and_size(frm);
+    const stripGuides = !_pd_guides_checked(frm);
+    const { svg, width_mm, height_mm, basename } =
+      _pd_get_current_svg_and_size(frm, { stripGuides });
     const r = await frappe.call({
       method: 'vias_packdesign.api.packdesign_pdf.export_packdesign_instance_svg',
       type: 'POST',
       args: { docname: frm.doc.name, svg, width_mm, height_mm, filename: basename + '.svg', is_private: 0 },
-      freeze: true
+      freeze: true,
     });
     const url = r?.message?.file_url;
     if (!url) throw new Error('No se recibió file_url');
     frappe.show_alert({ message: `SVG creado: <a target="_blank" href="${url}">${basename}.svg</a>`, indicator: 'green' });
     window.open(url, '_blank');
   } catch (e) {
-    console.error(e);
-    frappe.msgprint('SVG: ' + (e.message || e));
+    console.error(e); frappe.msgprint('SVG: ' + (e.message || e));
   } finally {
     frappe.dom.unfreeze();
   }
@@ -991,30 +1272,37 @@ async function exportSVG(frm) {
 async function exportDXF(frm) {
   try {
     frappe.dom.freeze('Generando DXF…');
-    const { svg, width_mm, height_mm, basename } = _pd_get_current_svg_and_size(frm);
+    const stripGuides = !_pd_guides_checked(frm);
+    const { svg, width_mm, height_mm, basename } =
+      _pd_get_current_svg_and_size(frm, { stripGuides });
     const r = await frappe.call({
       method: 'vias_packdesign.api.packdesign_pdf.export_packdesign_instance_dxf',
       type: 'POST',
       args: { docname: frm.doc.name, svg, width_mm, height_mm, filename: basename + '.dxf', is_private: 0 },
       freeze: true,
-      freeze_message: 'Convirtiendo SVG a DXF…'
+      freeze_message: 'Convirtiendo SVG a DXF…',
     });
     const url = r?.message?.file_url;
     if (!url) throw new Error('No se recibió file_url');
     frappe.show_alert({ message: `DXF creado: <a target="_blank" href="${url}">${basename}.dxf</a>`, indicator: 'green' });
     window.open(url, '_blank');
   } catch (e) {
-    console.error(e);
-    frappe.msgprint('DXF: ' + (e.message || e));
+    console.error(e); frappe.msgprint('DXF: ' + (e.message || e));
   } finally {
     frappe.dom.unfreeze();
   }
 }
 
+
+
+/* ==========================================================================
+   Hooks del DocType
+   ========================================================================== */
 frappe.ui.form.on('PackDesign Instance', {
   async refresh(frm) {
     await renderParamsUI(frm);
     renderFromGeometrySpec(frm, frm.doc._pd_values || {});
+
     if (!frm.__pd_export_btns) {
       frm.__pd_export_btns = true;
       frm.add_custom_button('Exportar PDF', () => exportPDF(frm));
@@ -1024,14 +1312,26 @@ frappe.ui.form.on('PackDesign Instance', {
   },
 
   async template(frm) {
-    frm.doc._pd_values = {};
-    await renderParamsUI(frm);
-    renderFromGeometrySpec(frm, {});
-  },
+  frm.doc._pd_values = {};
+  await renderParamsUI(frm);              
+  renderFromGeometrySpec(frm, frm.doc._pd_values || {});
+},
 
   async before_save(frm) {
+    // sync valores → child table
     const map = frm.doc._pd_values || {};
     const tpl = frm.doc.template ? await frappe.db.get_doc('PackDesign Template', frm.doc.template) : null;
     syncHiddenValuesTable(frm, map, tpl, true);
-  }
+
+    // cerrar popup si está abierto
+    if (frm.__pd_popup && !frm.__pd_popup.closed) frm.__pd_popup.close();
+  },
+
+  on_trash(frm) {
+    if (frm.__pd_popup && !frm.__pd_popup.closed) frm.__pd_popup.close();
+  },
+
+  on_hide(frm) {
+    if (frm.__pd_popup && !frm.__pd_popup.closed) frm.__pd_popup.close();
+  },
 });

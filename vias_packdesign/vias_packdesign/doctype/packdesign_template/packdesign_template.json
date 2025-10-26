@@ -90,8 +90,9 @@
    "label": "Geometria"
   }
  ],
+ "hide_toolbar": 1,
  "links": [],
- "modified": "2025-10-12 01:12:08.597495",
+ "modified": "2025-10-25 11:56:53.981495",
  "modified_by": "Administrator",
  "module": "VIAS PackDesign",
  "name": "PackDesign Template",

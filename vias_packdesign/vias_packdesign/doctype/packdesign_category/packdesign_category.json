@@ -93,9 +93,10 @@
    "options": "PackDesign Category"
   }
  ],
+ "hide_toolbar": 1,
  "is_tree": 1,
  "links": [],
- "modified": "2025-10-12 01:29:28.222532",
+ "modified": "2025-10-25 11:56:29.133289",
  "modified_by": "Administrator",
  "module": "VIAS PackDesign",
  "name": "PackDesign Category",
