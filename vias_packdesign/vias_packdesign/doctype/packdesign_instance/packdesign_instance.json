@@ -1,17 +1,20 @@
 {
  "actions": [],
  "autoname": "format:PDINST-{#####}",
- "creation": "2025-10-11 23:10:52.906332",
+ "creation": "2025-10-26 12:14:12.186788",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "section_break_jjdv",
   "title",
+  "column_break_bhxp",
   "column_break_ftfv",
   "template",
-  "column_break_bhxp",
+  "template_path",
   "column_break_hqov",
   "status",
+  "section_break_yoxb",
+  "template_picker_html",
   "section_break_kmyg",
   "values_html",
   "values",
@@ -32,10 +35,10 @@
   {
    "fieldname": "template",
    "fieldtype": "Link",
+   "hidden": 1,
    "in_list_view": 1,
    "label": "Plantilla",
-   "options": "PackDesign Template",
-   "reqd": 1
+   "options": "PackDesign Template"
   },
   {
    "default": "Draft",
@@ -103,11 +106,28 @@
   {
    "fieldname": "column_break_bhxp",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "template_path",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Path de Plantilla",
+   "read_only": 1
+  },
+  {
+   "fieldname": "template_picker_html",
+   "fieldtype": "HTML",
+   "label": "Seleccione Plantilla"
+  },
+  {
+   "fieldname": "section_break_yoxb",
+   "fieldtype": "Section Break",
+   "hide_border": 1
   }
  ],
  "hide_toolbar": 1,
  "links": [],
- "modified": "2025-10-20 12:12:49.719605",
+ "modified": "2025-10-26 20:52:49.309046",
  "modified_by": "Administrator",
  "module": "VIAS PackDesign",
  "name": "PackDesign Instance",

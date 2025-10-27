@@ -4,6 +4,10 @@
 
 const MM_PER_IN = 25.4;
 
+// === Boot-flag para evitar que el picker borre valores durante el arranque ===
+let __PD_BOOTING = false;
+
+
 /* ---------- Utilidades numéricas y de formato ---------- */
 function to_mm(val, unit_ui) {
   const n = parseFloat(val);
@@ -63,6 +67,55 @@ function sanitizeNumber(str, { allowNegative = false, maxDecimals = null } = {})
 }
 
 /* ---------- Helpers genéricos ---------- */
+
+
+function path_to_chain(pathStr){
+  // "Diseños / Cajas Plegadizas / Tuck Lock" → ["Diseños","Cajas Plegadizas","Tuck Lock"]
+  if (!pathStr) return [];
+  return String(pathStr)
+    .split('/')
+    .map(s => s.replace(/\u00A0/g,' ').trim()) // NBSP→espacio y trim
+    .filter(Boolean);
+}
+
+
+// Reconstruye el mapa desde la tabla hija 'values' (parameter/value)
+function rebuildMapFromChild(frm){
+  const rows = Array.isArray(frm.doc.values) ? frm.doc.values : [];
+  const map = {};
+  rows.forEach(r=>{
+    const k = canonKey(r.parameter || r.label || '');
+    const n = Number(r.value);
+    if (k && Number.isFinite(n)) map[k] = n;
+  });
+  return map;
+}
+
+// Lee lo que está escrito en la UI (inputs .pd-input) → mm/num
+function collectParamValuesFromUI(frm){
+  const holder = frm.get_field('values_html');
+  const wrap = holder?.$wrapper?.get(0);
+  if (!wrap) return {};
+  const unit = frm.doc._unit_ui || 'mm';
+  const map = {};
+  wrap.querySelectorAll('.pd-input').forEach(inp=>{
+    const key   = inp.getAttribute('data-param');
+    const isLen = inp.getAttribute('data-islen') === '1';
+    if (!key) return;
+    let raw = (inp.value || '').toString();
+    raw = sanitizeNumber(raw, { allowNegative:false, maxDecimals: isLen && unit==='in' ? 3 : null });
+    if (isLen) {
+      map[key] = to_mm(raw, unit);
+    } else {
+      const n = Number(raw);
+      if (Number.isFinite(n)) map[key] = n;
+    }
+  });
+  return map;
+}
+
+
+
 function canonKey(s) {
   return String(s || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -327,7 +380,7 @@ async function renderParamsUI(frm, targetDoc /* optional */) {
   if (!frm.doc._pd_overrides) frm.doc._pd_overrides = {};
 
   if (!frm.doc.template) {
-    wrap.innerHTML = `<div style="color:#999">Selecciona una plantilla…</div>`;
+    wrap.innerHTML = `<div style="color:#999"></div>`;
     return;
   }
 
@@ -723,7 +776,7 @@ async function renderFromGeometrySpec(frm, overrideValues = null) {
   if (!f) return;
 
   if (!frm.doc.template) {
-    f.$wrapper[0].innerHTML = '<div style="color:#999">Selecciona una plantilla…</div>';
+    f.$wrapper[0].innerHTML = '<div style="color:#999"></div>';
     return;
   }
 
@@ -1293,45 +1346,637 @@ async function exportDXF(frm) {
   }
 }
 
+/* ===================== HELPERS PICKER NUEVOS ===================== */
+function _pd_get_picker_state() {
+  const root = document.getElementById('pd-picker');
+  if (!root) return { path: '', template: '' };
+  const rows = Array.from(root.querySelectorAll('.pd-row > select'));
+  const parts = rows.map(sel => sel && sel.value ? String(sel.value).trim() : '').filter(Boolean);
+  const path = parts.join(' / ');
+  const tplSel = root.querySelector('#pd-template-block select');
+  const template = tplSel && tplSel.value ? String(tplSel.value).trim() : '';
+  return { path, template };
+}
+
+function _pd_apply_picker_state_to_doc(frm) {
+  const { path, template } = _pd_get_picker_state();
+
+  // Si el picker no tiene nada seleccionado, NO toques el doc
+  if (!path && !template) return;
+
+  frm.doc.template_path = path || '';
+  frm.doc.template = template || '';
+  frm.refresh_field('template_path');
+  frm.refresh_field('template');
+}
+
+
+function _pd_sync_picker_into_doc_if_present(frm){
+  if (document.getElementById('pd-picker')) _pd_apply_picker_state_to_doc(frm);
+}
+
 
 
 /* ==========================================================================
    Hooks del DocType
    ========================================================================== */
 frappe.ui.form.on('PackDesign Instance', {
-  async refresh(frm) {
-    await renderParamsUI(frm);
-    renderFromGeometrySpec(frm, frm.doc._pd_values || {});
+ // dentro de frappe.ui.form.on('PackDesign Instance', { ... })
+async refresh(frm) {
+  // Guarda valores originales del servidor y entra en modo boot
+  const _origTemplate = frm.doc.template || '';
+  const _origPath     = frm.doc.template_path || '';
+  __PD_BOOTING = true;
 
-    if (!frm.__pd_export_btns) {
-      frm.__pd_export_btns = true;
-      frm.add_custom_button('Exportar PDF', () => exportPDF(frm));
-      frm.add_custom_button('Exportar SVG', () => exportSVG(frm));
-      frm.add_custom_button('Exportar DXF', () => exportDXF(frm));
-    }
-  },
+  if (!frm.doc._pd_values || Object.keys(frm.doc._pd_values).length === 0) {
+    frm.doc._pd_values = rebuildMapFromChild(frm);
+  }
 
-  async template(frm) {
-  frm.doc._pd_values = {};
-  await renderParamsUI(frm);              
+  await renderParamsUI(frm);
   renderFromGeometrySpec(frm, frm.doc._pd_values || {});
+
+  if (!frm.__pd_export_btns) {
+    frm.__pd_export_btns = true;
+    frm.add_custom_button('Exportar PDF', () => exportPDF(frm));
+    frm.add_custom_button('Exportar SVG', () => exportSVG(frm));
+    frm.add_custom_button('Exportar DXF', () => exportDXF(frm));
+  }
+
+  build_template_picker(frm);
+
+  if (frm.doc.template) {
+    // Hidrata el picker desde el doc (no escribe al doc en boot)
+    await preload_template_path(frm);
+  }
+
+  // Salimos de boot: a partir de aquí el picker sí puede escribir
+  __PD_BOOTING = false;
+
+  // Reafirma lo que vino del server si por alguna carrera quedó vacío
+  if (_origTemplate && !frm.doc.template) {
+    frm.doc.template = _origTemplate;
+    frm.refresh_field('template');
+  }
+  if (_origPath && !frm.doc.template_path) {
+    frm.doc.template_path = _origPath;
+    frm.refresh_field('template_path');
+  }
 },
 
+
+  async template(frm) {
+    // Cambiar template limpia parámetros pero NO toca template_path
+    frm.doc._pd_values = {};
+    await renderParamsUI(frm);
+    renderFromGeometrySpec(frm, frm.doc._pd_values || {});
+  },
+
   async before_save(frm) {
-    // sync valores → child table
+    // 1) Trae los parámetros que el usuario ve
+    frm.doc._pd_values = collectParamValuesFromUI(frm);
     const map = frm.doc._pd_values || {};
     const tpl = frm.doc.template ? await frappe.db.get_doc('PackDesign Template', frm.doc.template) : null;
     syncHiddenValuesTable(frm, map, tpl, true);
 
-    // cerrar popup si está abierto
+    // 2) **FORZAR** que template y template_path sean EXACTAMENTE lo visible en el picker
+    _pd_apply_picker_state_to_doc(frm);
+
+    // 3) Cierra popup si estaba abierto
     if (frm.__pd_popup && !frm.__pd_popup.closed) frm.__pd_popup.close();
   },
 
-  on_trash(frm) {
-    if (frm.__pd_popup && !frm.__pd_popup.closed) frm.__pd_popup.close();
-  },
-
-  on_hide(frm) {
-    if (frm.__pd_popup && !frm.__pd_popup.closed) frm.__pd_popup.close();
-  },
+  on_trash(frm){ if (frm.__pd_popup && !frm.__pd_popup.closed) frm.__pd_popup.close(); },
+  on_hide(frm){ if (frm.__pd_popup && !frm.__pd_popup.closed) frm.__pd_popup.close(); }
 });
+
+
+let __pd_picker_ver = 0; // versión global de render (incrementa en cada build)
+
+function build_template_picker(frm){
+  const f = frm.get_field('template_picker_html');
+  if (!f) return;
+  const id = 'pd-picker';
+
+  const html = `
+    <style>
+      #${id}{display:block}
+      #${id} .pd-card{border:1px solid #e6ecf5;border-radius:12px;background:#fff;padding:12px}
+      #${id} .pd-rows{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));align-items:start}
+      #${id} .pd-block{display:flex;flex-direction:column;gap:6px}
+      #${id} .pd-label{font-size:12px;color:#475569}
+      #${id} select{appearance:none;border:1px solid #dbe3f2;border-radius:10px;background:#fff;height:38px;padding:0 12px;outline:none}
+      #${id} select:focus{border-color:#94b5ff;box-shadow:0 0 0 3px rgba(59,130,246,.15)}
+      #${id} .pd-path{font-size:12px;color:#475569;margin-top:8px}
+      #${id} .pd-block.template{order:999}
+    </style>
+    <div id="${id}">
+      <div class="pd-card">
+        <div class="pd-rows"></div>
+        <div class="pd-path"></div>
+      </div>
+    </div>
+  `;
+  f.$wrapper.html(html);
+
+  const ver = ++__pd_picker_ver;
+  // LOG
+  console.log('[PD] build_picker ver=', ver, 'template=', frm.doc.template);
+  init_picker(frm, id, ver);
+}
+
+
+
+async function init_picker(frm, rootId, ver){
+  const root = document.getElementById(rootId);
+  if (!root) return;
+  const rows = root.querySelector('.pd-rows');
+  if (!rows) return;
+  rows.innerHTML = '';
+
+  // Si ya hay algo guardado, NO retornes; renderízalo.
+  const hasTemplate     = !!frm.doc.template;
+  const hasTemplatePath = !!frm.doc.template_path;
+
+  if (hasTemplate || hasTemplatePath){
+    set_path_display(root, frm.doc.template_path || '');
+    // Intenta hidratar desde el template (hoja real)
+    try { await preload_template_path(frm); } catch {}
+    // Plan B: si por algún motivo no se construyó nada, usa el path guardado
+    if (!root.querySelector('.pd-row')) {
+      const chain = path_to_chain(frm.doc.template_path || '');
+      if (chain.length) await render_picker_from_chain(frm, chain);
+    }
+    return;
+  }
+
+  // Caso sin datos previos: siembra sólo el primer nivel.
+  add_category_select(frm, rows, null, 0, ver);
+  set_path_display(root, '');
+}
+
+
+
+
+
+
+function add_category_select(frm, rowsContainer, parent, level, ver){
+  fetch_categories(parent).then(list=>{
+    if (ver !== __pd_picker_ver) return;
+
+    const block = document.createElement('div');
+    block.className = 'pd-block pd-row';
+    block.dataset.level = String(level);
+
+    const label = document.createElement('div');
+    label.className = 'pd-label';
+    label.textContent = `Nivel ${level+1}`;
+
+    const sel = document.createElement('select');
+
+    // Placeholder real (no selecciona la primera opción)
+    const opt0 = document.createElement('option');
+    opt0.value = '';
+    opt0.textContent = `Selecciona nivel ${level+1}`;
+    opt0.selected = true;
+    opt0.disabled = true;
+    sel.appendChild(opt0);
+
+    // Soporta elementos como string u objeto {name,is_group}
+    list.forEach(item => {
+      const name = (typeof item === 'string') ? item : (item && item.name) ? item.name : '';
+      if (!name) return;
+      const isGroup = (typeof item === 'object') && (
+        item.is_group === 1 || item.is_group === '1' || item.is_group === true
+      );
+
+      const o = document.createElement('option');
+      o.value = name;
+      o.textContent = isGroup ? `▸ ${name}` : name;
+      sel.appendChild(o);
+    });
+
+    sel.value = '';               // asegura vacío al cargar
+    sel.selectedIndex = 0;
+
+    sel.addEventListener('change', ()=> on_category_change(frm, rowsContainer, block, sel.value, level, ver));
+
+    block.appendChild(label);
+    block.appendChild(sel);
+    rowsContainer.appendChild(block);
+  });
+}
+
+
+
+
+
+function ensure_template_block(rowsContainer){
+  let tpl = rowsContainer.querySelector('#pd-template-block');
+  if (!tpl){
+    tpl = document.createElement('div');
+    tpl.className = 'pd-block template';
+    tpl.id = 'pd-template-block';
+    const lbl = document.createElement('div');
+    lbl.className = 'pd-label';
+    lbl.textContent = 'Template';
+    const sel = document.createElement('select');
+    const opt0 = document.createElement('option');
+    opt0.value = ''; opt0.textContent = 'Selecciona template';
+    sel.appendChild(opt0);
+    tpl.appendChild(lbl);
+    tpl.appendChild(sel);
+    rowsContainer.appendChild(tpl);
+  }
+  return tpl;
+}
+
+
+
+
+function on_category_change(frm, rowsContainer, rowEl, name, level, ver){
+  const root = rowsContainer.parentElement;
+
+  prune_lower_levels(rowsContainer, level);
+  clear_templates_block(root);
+
+  // Sólo actualiza el texto visible del path (no el doc)
+  set_path_display(root, build_cat_path(rowsContainer));
+
+  if (!name){
+    // Nada seleccionado en este nivel: no tocar el doc
+    return;
+  }
+
+  Promise.all([ fetch_templates(name), fetch_categories(name) ]).then(([tplList, children])=>{
+    if (ver !== __pd_picker_ver) return;
+
+    const hasTemplatesHere = Array.isArray(tplList) && tplList.length > 0;
+    const hasChildren      = Array.isArray(children) && children.length > 0;
+
+    if (hasTemplatesHere) {
+      fetch_and_render_templates(frm, name, root, ver);
+      return;
+    }
+
+    if (hasChildren) {
+      add_category_select(frm, rowsContainer, name, level+1, ver);
+      // Actualiza sólo el texto visible del path
+      set_path_display(root, build_cat_path(rowsContainer));
+      return;
+    }
+
+    // Hoja sin hijos ni templates -> solo deja el path visible como está
+    set_path_display(root, build_cat_path(rowsContainer));
+  });
+}
+
+
+
+
+
+
+function moveTemplateToEnd(rowsContainer){
+  const tpl = rowsContainer.querySelector('#pd-template-block');
+  if (tpl){
+    rowsContainer.appendChild(tpl); // re-append para dejarlo al final del DOM
+    tpl.classList.add('template');   // asegura la regla CSS de order
+  }
+}
+
+
+function fetch_categories(parent){
+  return frappe.call({
+    method: 'vias_packdesign.api.packdesign_picker.category_children',
+    args: { parent: parent||null, txt: "", page_len: 200, start: 0 }
+  }).then(r=> r.message||[]);
+}
+
+function fetch_templates(category){
+  return frappe.call({
+    method: 'vias_packdesign.api.packdesign_picker.templates_under',
+    args: { category, txt: "", page_len: 500, start: 0 }
+  }).then(r=> r.message||[]);
+}
+
+function fetch_and_render_templates(frm, category, root, ver){
+  const rows = root.querySelector('.pd-rows');
+
+  fetch_templates(category).then(list=>{
+    if (ver !== __pd_picker_ver) return;
+
+    if (!list || !list.length){
+      clear_templates_block(root);
+      // No tocar frm.doc.template ni template_path aquí
+      set_path_display(root, build_cat_path(rows));
+      return;
+    }
+
+    const tpl = document.createElement('div');
+    tpl.className = 'pd-block template';
+    tpl.id = 'pd-template-block';
+
+    const lbl = document.createElement('div');
+    lbl.className = 'pd-label';
+    lbl.textContent = 'Template';
+
+    const sel = document.createElement('select');
+
+    const opt0 = document.createElement('option');
+    opt0.value = '';
+    opt0.textContent = 'Selecciona template';
+    opt0.selected = true;
+    opt0.disabled = true;
+    sel.appendChild(opt0);
+
+    list.forEach(n => sel.appendChild(new Option(n, n)));
+
+    sel.onchange = ()=>{
+      // Es el único momento (elección explícita) donde fijamos el template en el doc
+      frm.doc.template = sel.value || '';
+      frm.refresh_field('template');
+      // Actualiza sólo el path visible; el template_path real se fija en before_save
+      set_path_display(root, build_cat_path(rows));
+    };
+
+    clear_templates_block(root);
+    tpl.appendChild(lbl);
+    tpl.appendChild(sel);
+    rows.appendChild(tpl);
+
+    // Si ya viene un template del servidor, pré-selección sin disparar cambios destructivos
+    if (frm.doc.template){
+      let hit = Array.from(sel.options).find(o => o.value === frm.doc.template);
+      if (!hit){
+        hit = new Option(frm.doc.template, frm.doc.template, true, true);
+        hit.dataset._temp = '1';
+        sel.appendChild(hit);
+      }
+      hit.selected = true;
+      sel.value = frm.doc.template;
+    }
+
+    set_path_display(root, build_cat_path(rows));
+  });
+}
+
+
+
+
+
+
+function prune_lower_levels(rowsContainer, level){
+  const rows = Array.from(rowsContainer.querySelectorAll('.pd-row'));
+  rows.forEach(r=>{
+    const lv = parseInt(r.dataset.level,10);
+    if (lv>level) r.remove();
+  });
+}
+
+function build_cat_path(rowsContainer){
+  const rows = Array.from(rowsContainer.querySelectorAll('.pd-row'));
+  const names = [];
+  rows.forEach(r=>{
+    const sel = r.querySelector('select');
+    const v = sel && sel.value ? sel.value : '';
+    if (v) names.push(v);
+  });
+  return names.join(' / ');
+}
+
+function set_path_from_rows(frm, rowsContainer){
+  const rootEl = rowsContainer.parentElement;
+  const path = build_cat_path(rowsContainer);
+  set_path_display(rootEl, path); // sólo UI
+}
+
+
+
+
+function set_path_display(root, path){
+  const el = root.querySelector('.pd-path');
+  if (el) el.textContent = path||'';
+}
+
+function clear_templates_block(root){
+  const el = root.querySelector('#pd-template-block');
+  if (el) el.remove();  // eliminar por completo
+}
+function _canonCat(s){
+  return String(s||'')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // sin acentos
+    .replace(/\u00A0/g,' ')  // NBSP → espacio
+    .replace(/\s+/g,' ')     // colapsa espacios
+    .trim()
+    .toLowerCase();
+}
+
+
+
+async function render_picker_from_chain(frm, chain){
+  const root = document.getElementById('pd-picker');
+  if (!root) return;
+  const rows = root.querySelector('.pd-rows');
+  if (!rows) return;
+
+  const ver = ++__pd_picker_ver;
+  rows.innerHTML = '';
+
+  // Cadena deseada (copiamos para no mutar arg)
+  let wantChain = Array.isArray(chain) ? chain.slice() : [];
+
+  let parent = null;
+  let lastMatched = null;
+
+  // Utilidad para obtener el nombre (string u objeto)
+  const getName = (x) => (typeof x === 'string') ? x : (x && x.name) ? x.name : '';
+
+  // Cargamos Nivel 1 del server
+  const listLvl1 = await fetch_categories(parent);
+  if (ver !== __pd_picker_ver) return;
+
+  // --- (1) Strip de la RAÍZ que no exista en nivel 1 (acepta strings/objetos) ---
+  if (Array.isArray(listLvl1) && listLvl1.length){
+    const lvl1Set = new Set(listLvl1.map(x => _canonCat(getName(x))).filter(Boolean));
+    while (wantChain.length && !lvl1Set.has(_canonCat(wantChain[0]))){
+      // quita elementos del principio hasta que el primero sí exista en nivel 1
+      wantChain.shift();
+    }
+  }
+
+  // Creador de fila (nivel) que acepta strings/objetos
+  const mkRow = (level, options)=> {
+    const block = document.createElement('div');
+    block.className = 'pd-block pd-row';
+    block.dataset.level = String(level);
+
+    const label = document.createElement('div');
+    label.className = 'pd-label';
+    label.textContent = `Nivel ${level+1}`;
+
+    const sel = document.createElement('select');
+
+    const opt0 = document.createElement('option');
+    opt0.value = '';
+    opt0.textContent = `Selecciona nivel ${level+1}`;
+    opt0.selected = true;
+    opt0.disabled = true;
+    sel.appendChild(opt0);
+
+    (options||[]).forEach(x=>{
+      const name = getName(x);
+      if (!name) return;
+      const isGroup = (typeof x === 'object') && (
+        x.is_group === 1 || x.is_group === '1' || x.is_group === true
+      );
+      sel.appendChild(new Option(isGroup ? `▸ ${name}` : name, name));
+    });
+
+    sel.addEventListener('change', ()=>{
+      on_category_change(frm, rows, block, sel.value, level, ver);
+    });
+
+    block.appendChild(label);
+    block.appendChild(sel);
+    rows.appendChild(block);
+    return sel;
+  };
+
+  if (!listLvl1 || !listLvl1.length){
+    clear_templates_block(root);
+    set_path_display(root, '');
+    return;
+  }
+
+  const sel0 = mkRow(0, listLvl1);
+
+  // --- (2) Match tolerante (acentos/espacios/case) en Nivel 1 ---
+  const want0 = wantChain[0] || '';
+  if (want0){
+    const want0C = _canonCat(want0);
+    const hit0 = Array.from(sel0.options).find(o =>
+      o.value && _canonCat(o.value) === want0C
+    );
+    if (hit0){
+      hit0.selected = true;
+      sel0.value = hit0.value;
+      // des-selecciona el placeholder explícitamente (Safari/Chromium)
+      sel0.options[0].selected = false;
+      parent = hit0.value;
+      lastMatched = hit0.value;
+    }
+  }
+
+  // --- (3) Descender niveles con el mismo match tolerante ---
+  for (let i = 1; i < wantChain.length && lastMatched; i++){
+    const list = await fetch_categories(parent);
+    if (ver !== __pd_picker_ver) return;
+    if (!list || !list.length) break;
+
+    const sel = mkRow(i, list);
+    const want = wantChain[i];
+    const wantC = _canonCat(want);
+
+    const hit = Array.from(sel.options).find(o =>
+      o.value && _canonCat(o.value) === wantC
+    );
+
+    if (hit){
+      hit.selected = true;
+      sel.value = hit.value;
+      sel.options[0].selected = false; // limpia placeholder
+      parent = hit.value;
+      lastMatched = hit.value;
+    } else {
+      break;
+    }
+  }
+
+  // --- (4) Render de templates en la última categoría encontrada ---
+  if (lastMatched){
+    await fetch_and_render_templates(frm, lastMatched, root, ver);
+  } else {
+    clear_templates_block(root);
+  }
+
+  set_path_display(root, build_cat_path(rows));
+}
+
+
+
+
+
+
+
+function set_template_path(frm){
+  // SOLO lo que se ve en el picker
+  const root = document.getElementById('pd-picker');
+  const rows = root ? root.querySelector('.pd-rows') : null;
+  const path = rows ? build_cat_path(rows) : '';
+  frm.set_value('template_path', path || '');
+}
+
+
+
+async function preload_template_path(frm){
+  const root = document.getElementById('pd-picker');
+  if (!root) return;
+
+  // Si no hay template, intenta con el path guardado directamente
+  if (!frm.doc.template){
+    const chainByPath = path_to_chain(frm.doc.template_path || '');
+    if (chainByPath.length){
+      await render_picker_from_chain(frm, chainByPath);
+    }
+    return;
+  }
+
+  // 1) Datos del template → path + categoría hoja (si el backend lo da)
+  let info = {};
+  try {
+    info = await frappe.call({
+      method: 'vias_packdesign.api.packdesign_picker.template_path',
+      args: { template_name: frm.doc.template }
+    }).then(r=> r.message || {});
+  } catch {}
+
+  // 2) Intentar con la "leaf category" del backend
+  const leafCat = info.category || null;
+  if (leafCat){
+    const chain = await build_category_chain(leafCat).catch(()=>[]);
+    if (Array.isArray(chain) && chain.length){
+      await render_picker_from_chain(frm, chain);
+      return;
+    }
+  }
+
+  // 3) Plan B: usar el template_path guardado si existe
+  const chainByPath = path_to_chain(frm.doc.template_path || info.path || '');
+  if (chainByPath.length){
+    await render_picker_from_chain(frm, chainByPath);
+  }
+}
+
+
+
+
+
+
+function build_category_chain(category){
+  return frappe.call({
+    method: 'frappe.client.get',
+    args: { doctype: 'PackDesign Category', name: category }
+  }).then(async r=>{
+    const node = r.message||{};
+    const path = await frappe.call({
+      method: 'frappe.client.get_list',
+      args: {
+        doctype: 'PackDesign Category',
+        fields: ['name'],
+        filters: [['lft','<=', node.lft],['rgt','>=', node.rgt]],
+        order_by: 'lft asc',
+        limit_page_length: 500
+      }
+    }).then(x=> (x.message||[]).map(y=>y.name));
+    return path;
+  });
+}
